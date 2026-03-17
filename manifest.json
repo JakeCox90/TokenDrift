@@ -1,0 +1,13 @@
+{
+  "name": "TokenDrift",
+  "id": "tokendrift-plugin",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "dist/ui.html",
+  "documentAccess": "dynamic-page",
+  "networkAccess": {
+    "allowedDomains": ["api.figma.com"],
+    "reasoning": "Fetches variables and styles from external Figma files via REST API"
+  },
+  "editorType": ["figma"]
+}
