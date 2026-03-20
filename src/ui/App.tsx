@@ -78,6 +78,7 @@ export function App() {
   }, []);
 
   const refreshLibraries = useCallback(() => {
+    setLibraryError(null);
     postToSandbox({ type: 'get-linked-libraries' });
   }, []);
 

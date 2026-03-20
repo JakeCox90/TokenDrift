@@ -37,9 +37,7 @@ export function SetupView({
   const [activeTab, setActiveTab] = useState<CompareTab>('libraries');
   const handleTabChange = (tab: CompareTab) => {
     setActiveTab(tab);
-    if (tab === 'libraries') {
-      onRefreshLibraries();
-    }
+    onRefreshLibraries();
   };
   const [showSettings, setShowSettings] = useState(false);
   const [showMatchSettings, setShowMatchSettings] = useState(false);
@@ -387,7 +385,23 @@ export function SetupView({
         {/* Tab content: Libraries */}
         {activeTab === 'libraries' && (
           <div>
-            {libraries.length === 0 ? (
+            {libraries.length === 0 && !libraryError ? (
+              <div style={{
+                padding: '20px 16px',
+                textAlign: 'center',
+              }}>
+                <div style={{
+                  width: '20px',
+                  height: '20px',
+                  border: `2px solid ${s.colors.borderLight}`,
+                  borderTopColor: s.colors.brand,
+                  borderRadius: '50%',
+                  animation: 'spin 0.8s linear infinite',
+                  margin: '0 auto 8px',
+                }} />
+                <p style={{ fontSize: '10px', color: s.colors.textMuted }}>Loading libraries...</p>
+              </div>
+            ) : libraries.length === 0 ? (
               <div style={{
                 padding: '20px 16px',
                 textAlign: 'center',
