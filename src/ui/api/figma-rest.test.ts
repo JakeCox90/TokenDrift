@@ -83,6 +83,27 @@ describe('fetchFileVariables', () => {
     expect(tokens[0].name).toBe('color/primary');
   });
 
+  it('filters out deleted and remote variables', async () => {
+    const apiResponse = {
+      meta: {
+        variableCollections: {
+          'vc:1': { name: 'Brand', modes: [{ modeId: 'm:1', name: 'Default' }] },
+          'vc:2': { name: 'Old Library', modes: [{ modeId: 'm:2', name: 'Default' }], remote: true },
+        },
+        variables: {
+          'v:1': { name: 'color/primary', variableCollectionId: 'vc:1', resolvedType: 'COLOR' },
+          'v:2': { name: 'old/token', variableCollectionId: 'vc:1', resolvedType: 'COLOR', deletedButReferenced: true },
+          'v:3': { name: 'remote/token', variableCollectionId: 'vc:1', resolvedType: 'COLOR', remote: true },
+          'v:4': { name: 'library/token', variableCollectionId: 'vc:2', resolvedType: 'COLOR' },
+        },
+      },
+    };
+    globalThis.fetch = mockFetch(apiResponse);
+    const tokens = await fetchFileVariables(FILE_KEY, TOKEN);
+    expect(tokens).toHaveLength(1);
+    expect(tokens[0].name).toBe('color/primary');
+  });
+
   it('sends X-Figma-Token header', async () => {
     const fetchMock = mockFetch({ meta: { variableCollections: {}, variables: {} } });
     globalThis.fetch = fetchMock;

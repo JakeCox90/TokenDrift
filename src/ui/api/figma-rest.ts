@@ -40,9 +40,21 @@ export async function fetchFileVariables(
     }
   }
 
+  // Build a set of valid (non-remote, non-deleted) collection IDs
+  const validCollections = new Set<string>();
+  for (const [id, collection] of Object.entries(collections)) {
+    if (!collection.remote) {
+      validCollections.add(id);
+    }
+  }
+
   for (const variable of Object.values(variables)) {
-    // Skip variables whose name exactly matches a mode name
+    // Skip deleted, remote, or mode-named variables
+    if (variable.deletedButReferenced) continue;
+    if (variable.remote) continue;
     if (modeNames.has(variable.name)) continue;
+    // Skip variables from remote/library collections
+    if (!validCollections.has(variable.variableCollectionId)) continue;
 
     const collection = collections[variable.variableCollectionId];
     tokens.push({
@@ -146,6 +158,8 @@ interface FigmaVariablesResponse {
       {
         name: string;
         modes: Array<{ modeId: string; name: string }>;
+        remote?: boolean;
+        hiddenFromPublishing?: boolean;
       }
     >;
     variables: Record<
@@ -154,6 +168,12 @@ interface FigmaVariablesResponse {
         name: string;
         variableCollectionId: string;
         resolvedType: string;
+        /** True if the variable was deleted but is still referenced somewhere */
+        deletedButReferenced?: boolean;
+        /** True if hidden from library publishing */
+        hiddenFromPublishing?: boolean;
+        /** True if this is a remote (library) variable, not local */
+        remote?: boolean;
       }
     >;
   };
