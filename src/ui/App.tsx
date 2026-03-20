@@ -151,6 +151,8 @@ export function App() {
         <ResultsView
           issues={issues}
           onBack={() => setView('setup')}
+          onRefresh={handleRunComparison}
+          loading={loading}
         />
       )}
     </>

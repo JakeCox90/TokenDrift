@@ -5,6 +5,8 @@ import * as s from '../styles';
 interface ResultsViewProps {
   issues: DriftIssue[];
   onBack: () => void;
+  onRefresh: () => void;
+  loading: boolean;
 }
 
 // ─── Tree Structure ──────────────────────────────────────────────────────────
@@ -95,7 +97,7 @@ const tokenTypeIcons: Record<TokenType, string> = {
   GRID_STYLE: 'G',
 };
 
-export function ResultsView({ issues, onBack }: ResultsViewProps) {
+export function ResultsView({ issues, onBack, onRefresh, loading }: ResultsViewProps) {
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState<DriftIssueType | 'all'>('all');
 
@@ -137,6 +139,24 @@ export function ResultsView({ issues, onBack }: ResultsViewProps) {
         <h2 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>
           Results
         </h2>
+        <button
+          onClick={loading ? undefined : onRefresh}
+          disabled={loading}
+          style={{
+            marginLeft: 'auto',
+            padding: '4px 10px',
+            background: loading ? s.colors.bgSecondary : s.colors.brand,
+            color: loading ? s.colors.textMuted : '#fff',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: loading ? 'not-allowed' : 'pointer',
+            fontSize: '11px',
+            fontWeight: 500,
+          }}
+          title="Re-run comparison"
+        >
+          {loading ? 'Refreshing...' : 'Refresh'}
+        </button>
       </div>
 
       {/* No drift */}
