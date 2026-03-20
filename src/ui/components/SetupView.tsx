@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks';
+import { useState, useEffect, useRef } from 'preact/hooks';
 import type { FileReference, ComparisonConfig, MatchStrategy, LinkedLibrary } from '../../types';
 import { extractFileKey } from '../utils/figma-url';
 import { fetchFileName } from '../api/figma-rest';
@@ -34,7 +34,7 @@ export function SetupView({
   const [fileInput, setFileInput] = useState('');
   const [patInput, setPatInput] = useState('');
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<CompareTab>('url');
+  const [activeTab, setActiveTab] = useState<CompareTab>('libraries');
   const [showSettings, setShowSettings] = useState(false);
   const [addingFile, setAddingFile] = useState(false);
 
@@ -92,6 +92,32 @@ export function SetupView({
     setShowSettings(false);
   };
 
+  // Resolve file names for any entries that still have the key as label
+  const resolvedRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (!pat) return;
+    const unresolved = config.comparisonFiles.filter(
+      f => f.fileKey === f.label && !resolvedRef.current.has(f.fileKey),
+    );
+    if (unresolved.length === 0) return;
+
+    for (const file of unresolved) {
+      resolvedRef.current.add(file.fileKey);
+      fetchFileName(file.fileKey, pat)
+        .then(name => {
+          onConfigChange({
+            ...config,
+            comparisonFiles: config.comparisonFiles.map(f =>
+              f.fileKey === file.fileKey ? { ...f, label: name } : f,
+            ),
+          });
+        })
+        .catch(() => {
+          // Leave as-is if fetch fails
+        });
+    }
+  }, [config.comparisonFiles, pat]);
+
   const canRun = config.comparisonFiles.length > 0 && !!pat && !loading;
 
   // Filter recent files to exclude already-added ones
@@ -100,9 +126,9 @@ export function SetupView({
   );
 
   const tabs: { key: CompareTab; label: string; count?: number }[] = [
-    { key: 'url', label: 'URL' },
     { key: 'libraries', label: 'Libraries', count: libraries.length },
     { key: 'recent', label: 'Recent', count: availableRecent.length },
+    { key: 'url', label: 'URL' },
   ];
 
   return (
