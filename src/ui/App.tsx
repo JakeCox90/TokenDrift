@@ -27,6 +27,7 @@ export function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [libraries, setLibraries] = useState<LinkedLibrary[]>([]);
+  const [libraryError, setLibraryError] = useState<string | null>(null);
   const [recentFiles, setRecentFilesState] = useState<FileReference[]>([]);
 
   // PAT stored in clientStorage
@@ -68,6 +69,7 @@ export function App() {
       const msg = event.data?.pluginMessage as SandboxToUIMessage | undefined;
       if (msg && msg.type === 'linked-libraries') {
         setLibraries(msg.libraries);
+        setLibraryError(msg.error ?? null);
       }
     };
     window.addEventListener('message', handler);
@@ -214,6 +216,7 @@ export function App() {
           onRefreshLibraries={refreshLibraries}
           loading={loading}
           libraries={libraries}
+          libraryError={libraryError}
           recentFiles={recentFiles}
         />
       )}

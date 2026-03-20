@@ -14,6 +14,7 @@ interface SetupViewProps {
   onRefreshLibraries: () => void;
   loading: boolean;
   libraries: LinkedLibrary[];
+  libraryError: string | null;
   recentFiles: FileReference[];
 }
 
@@ -26,6 +27,7 @@ export function SetupView({
   onRefreshLibraries,
   loading,
   libraries,
+  libraryError,
   recentFiles,
 }: SetupViewProps) {
   const [fileInput, setFileInput] = useState('');
@@ -309,7 +311,9 @@ export function SetupView({
                   No linked libraries found
                 </p>
                 <p style={{ fontSize: '10px', color: s.colors.textMuted, marginTop: '4px' }}>
-                  Enable libraries in your Figma file first
+                  {libraryError
+                    ? libraryError
+                    : 'Enable libraries in your Figma file first'}
                 </p>
                 <button
                   onClick={onRefreshLibraries}
@@ -505,16 +509,35 @@ export function SetupView({
                   transition: 'all 0.15s ease',
                 }}
               >
-                <span style={{
-                  fontFamily: "'SF Mono', 'Fira Code', monospace",
-                  fontSize: '10px',
-                  color: s.colors.textSecondary,
+                <div style={{
+                  flex: 1,
+                  minWidth: 0,
                   overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
                 }}>
-                  {file.label}
-                </span>
+                  <div style={{
+                    fontSize: '11px',
+                    fontWeight: 500,
+                    color: s.colors.text,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {file.label}
+                  </div>
+                  {file.fileKey !== file.label && (
+                    <div style={{
+                      fontFamily: "'SF Mono', 'Fira Code', monospace",
+                      fontSize: '9px',
+                      color: s.colors.textMuted,
+                      marginTop: '1px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {file.fileKey}
+                    </div>
+                  )}
+                </div>
                 <button
                   onClick={() => handleRemoveFile(file.fileKey)}
                   style={{

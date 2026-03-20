@@ -100,7 +100,7 @@ export type UIToSandboxMessage =
 /** Messages sent from sandbox to UI */
 export type SandboxToUIMessage =
   | { type: 'local-tokens'; tokens: NormalisedToken[] }
-  | { type: 'linked-libraries'; libraries: LinkedLibrary[] }
+  | { type: 'linked-libraries'; libraries: LinkedLibrary[]; error?: string }
   | { type: 'storage-result'; key: string; value: string | null }
   | { type: 'storage-set'; key: string; success: boolean }
   | { type: 'error'; message: string };

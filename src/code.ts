@@ -19,7 +19,8 @@ figma.ui.onmessage = async (msg: UIToSandboxMessage) => {
         const libraries = await getLinkedLibraries();
         sendToUI({ type: 'linked-libraries', libraries });
       } catch (err) {
-        sendToUI({ type: 'error', message: String(err) });
+        // Always respond with linked-libraries so the UI doesn't hang
+        sendToUI({ type: 'linked-libraries', libraries: [], error: String(err) });
       }
       break;
     }
@@ -99,20 +100,26 @@ async function getLocalTokens(): Promise<NormalisedToken[]> {
 }
 
 async function getLinkedLibraries(): Promise<LinkedLibrary[]> {
-  const collections = await figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync();
-
-  // Group collections by library name
   const libraryMap = new Map<string, string[]>();
-  for (const c of collections) {
-    if (!libraryMap.has(c.libraryName)) {
-      libraryMap.set(c.libraryName, []);
+
+  // Variable collections
+  if (figma.teamLibrary && typeof figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync === 'function') {
+    try {
+      const collections = await figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync();
+      for (const c of collections) {
+        if (!libraryMap.has(c.libraryName)) {
+          libraryMap.set(c.libraryName, []);
+        }
+        libraryMap.get(c.libraryName)!.push(c.key);
+      }
+    } catch (_) {
+      // API not available in this context
     }
-    libraryMap.get(c.libraryName)!.push(c.key);
   }
 
   const libraries: LinkedLibrary[] = [];
-  for (const [name, collectionKeys] of libraryMap) {
-    libraries.push({ name, collectionKeys });
+  for (const _ref of libraryMap) {
+    libraries.push({ name: _ref[0], collectionKeys: _ref[1] });
   }
 
   return libraries;
