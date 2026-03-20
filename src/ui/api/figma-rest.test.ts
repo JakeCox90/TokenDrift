@@ -22,8 +22,8 @@ describe('fetchFileVariables', () => {
     const apiResponse = {
       meta: {
         variableCollections: {
-          'vc:1': { name: 'Brand' },
-          'vc:2': { name: 'Layout' },
+          'vc:1': { name: 'Brand', modes: [{ modeId: 'm:1', name: 'Default' }] },
+          'vc:2': { name: 'Layout', modes: [{ modeId: 'm:2', name: 'Default' }] },
         },
         variables: {
           'v:1': { name: 'color/primary', variableCollectionId: 'vc:1', resolvedType: 'COLOR' },
@@ -62,6 +62,25 @@ describe('fetchFileVariables', () => {
     });
     const tokens = await fetchFileVariables(FILE_KEY, TOKEN);
     expect(tokens).toEqual([]);
+  });
+
+  it('filters out variables whose name matches a mode name', async () => {
+    const apiResponse = {
+      meta: {
+        variableCollections: {
+          'vc:1': { name: 'Brand', modes: [{ modeId: 'm:1', name: 'Light' }, { modeId: 'm:2', name: 'Dark' }] },
+        },
+        variables: {
+          'v:1': { name: 'color/primary', variableCollectionId: 'vc:1', resolvedType: 'COLOR' },
+          'v:2': { name: 'Light', variableCollectionId: 'vc:1', resolvedType: 'STRING' },
+          'v:3': { name: 'Dark', variableCollectionId: 'vc:1', resolvedType: 'STRING' },
+        },
+      },
+    };
+    globalThis.fetch = mockFetch(apiResponse);
+    const tokens = await fetchFileVariables(FILE_KEY, TOKEN);
+    expect(tokens).toHaveLength(1);
+    expect(tokens[0].name).toBe('color/primary');
   });
 
   it('sends X-Figma-Token header', async () => {
@@ -120,7 +139,7 @@ describe('fetchFileTokens', () => {
           status: 200,
           json: () => Promise.resolve({
             meta: {
-              variableCollections: { 'vc:1': { name: 'Brand' } },
+              variableCollections: { 'vc:1': { name: 'Brand', modes: [{ modeId: 'm:1', name: 'Default' }] } },
               variables: { 'v:1': { name: 'primary', variableCollectionId: 'vc:1', resolvedType: 'COLOR' } },
             },
           }),

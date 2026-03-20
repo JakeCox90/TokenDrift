@@ -28,7 +28,22 @@ export async function fetchFileVariables(
   const variables = data.meta.variables;
   const tokens: NormalisedToken[] = [];
 
+  // Build a set of mode names per collection so we can filter them out.
+  // Figma collections have modes (e.g. "Light", "Dark", "Mode 1") that
+  // appear in the API response but aren't real design tokens.
+  const modeNames = new Set<string>();
+  for (const collection of Object.values(collections)) {
+    if (collection.modes) {
+      for (const mode of collection.modes) {
+        modeNames.add(mode.name);
+      }
+    }
+  }
+
   for (const variable of Object.values(variables)) {
+    // Skip variables whose name exactly matches a mode name
+    if (modeNames.has(variable.name)) continue;
+
     const collection = collections[variable.variableCollectionId];
     tokens.push({
       name: variable.name,
@@ -126,7 +141,13 @@ function mapStyleType(figmaType: string): NormalisedToken['type'] {
 
 interface FigmaVariablesResponse {
   meta: {
-    variableCollections: Record<string, { name: string }>;
+    variableCollections: Record<
+      string,
+      {
+        name: string;
+        modes: Array<{ modeId: string; name: string }>;
+      }
+    >;
     variables: Record<
       string,
       {

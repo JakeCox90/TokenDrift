@@ -43,7 +43,16 @@ async function getLocalTokens(): Promise<NormalisedToken[]> {
   const collections = await figma.variables.getLocalVariableCollectionsAsync();
   const collectionMap = new Map(collections.map(c => [c.id, c.name]));
 
+  // Collect mode names so we can filter them out — these aren't real tokens
+  const modeNames = new Set<string>();
+  for (const c of collections) {
+    for (const mode of c.modes) {
+      modeNames.add(mode.name);
+    }
+  }
+
   for (const v of variables) {
+    if (modeNames.has(v.name)) continue;
     tokens.push({
       name: v.name,
       type: 'VARIABLE',
