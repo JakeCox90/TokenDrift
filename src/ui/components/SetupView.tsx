@@ -1,6 +1,7 @@
 import { useState } from 'preact/hooks';
 import type { FileReference, ComparisonConfig, MatchStrategy, LinkedLibrary } from '../../types';
 import { extractFileKey } from '../utils/figma-url';
+import { fetchFileName } from '../api/figma-rest';
 import * as s from '../styles';
 
 type CompareTab = 'url' | 'libraries' | 'recent';
@@ -34,8 +35,8 @@ export function SetupView({
   const [patInput, setPatInput] = useState('');
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<CompareTab>('url');
-
-  const showPatField = !pat;
+  const [showSettings, setShowSettings] = useState(false);
+  const [addingFile, setAddingFile] = useState(false);
 
   const handleAddFile = (fileKey: string, label: string) => {
     if (config.comparisonFiles.some(f => f.fileKey === fileKey)) {
@@ -50,13 +51,29 @@ export function SetupView({
     });
   };
 
-  const handleAddFromInput = () => {
+  const handleAddFromInput = async () => {
     const key = extractFileKey(fileInput);
     if (!key) {
       setError('Enter a valid Figma file URL or key');
       return;
     }
-    handleAddFile(key, key);
+
+    // Fetch the file name from the API for a readable label
+    if (pat) {
+      setAddingFile(true);
+      setError('');
+      try {
+        const name = await fetchFileName(key, pat);
+        handleAddFile(key, name);
+      } catch {
+        // Fall back to file key if name fetch fails
+        handleAddFile(key, key);
+      } finally {
+        setAddingFile(false);
+      }
+    } else {
+      handleAddFile(key, key);
+    }
     setFileInput('');
   };
 
@@ -72,6 +89,7 @@ export function SetupView({
     if (!trimmed) return;
     onPatChange(trimmed);
     setPatInput('');
+    setShowSettings(false);
   };
 
   const canRun = config.comparisonFiles.length > 0 && !!pat && !loading;
@@ -109,14 +127,34 @@ export function SetupView({
           <h2 style={{ fontSize: '15px', fontWeight: 700, color: s.colors.text, letterSpacing: '-0.01em' }}>
             TokenDrift
           </h2>
+          {pat && (
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              style={{
+                marginLeft: 'auto',
+                padding: '4px 6px',
+                background: showSettings ? s.colors.bgTertiary : 'transparent',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                color: s.colors.textMuted,
+                lineHeight: 1,
+                transition: 'all 0.15s ease',
+              }}
+              title="Settings"
+            >
+              &#9881;
+            </button>
+          )}
         </div>
         <p style={{ color: s.colors.textMuted, fontSize: '11px', marginLeft: '32px' }}>
           Compare design tokens across Figma files
         </p>
       </div>
 
-      {/* PAT input */}
-      {showPatField && (
+      {/* PAT input — shown when no PAT set */}
+      {!pat && (
         <div style={s.section}>
           <label style={s.label}>Access Token</label>
           <div style={s.card}>
@@ -143,25 +181,37 @@ export function SetupView({
         </div>
       )}
 
-      {pat && (
-        <div style={s.section}>
-          <div style={{
-            ...s.card,
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '10px 12px',
-            background: s.colors.successBg,
-            border: `1px solid ${s.colors.successBorder}`,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '12px' }}>&#10003;</span>
-              <span style={{ fontSize: '11px', fontWeight: 500, color: s.colors.success }}>
+      {/* Settings dropdown — shown when gear is clicked */}
+      {pat && showSettings && (
+        <div style={{
+          ...s.card,
+          marginBottom: '16px',
+          padding: '12px',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+            <label style={{ ...s.label, margin: 0 }}>Access Token</label>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{
+              flex: 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}>
+              <span style={{ fontSize: '12px', color: s.colors.success }}>&#10003;</span>
+              <span style={{ fontSize: '11px', fontWeight: 500, color: s.colors.textSecondary }}>
                 Token saved
               </span>
             </div>
-            <button style={s.buttonGhost} onClick={() => onPatChange('')}>
-              Clear
+            <button
+              style={{
+                ...s.buttonGhost,
+                fontSize: '11px',
+                color: s.colors.error,
+              }}
+              onClick={() => { onPatChange(''); setShowSettings(false); }}
+            >
+              Remove
             </button>
           </div>
         </div>
@@ -280,6 +330,7 @@ export function SetupView({
                 style={{ ...s.input, flex: 1 }}
                 placeholder="Paste Figma file URL or key..."
                 value={fileInput}
+                disabled={addingFile}
                 onInput={(e) => {
                   setFileInput((e.target as HTMLInputElement).value);
                   setError('');
@@ -287,10 +338,11 @@ export function SetupView({
                 onKeyDown={(e) => e.key === 'Enter' && handleAddFromInput()}
               />
               <button
-                style={{ ...s.button, width: 'auto', whiteSpace: 'nowrap', padding: '9px 14px' }}
+                style={{ ...s.button, width: 'auto', whiteSpace: 'nowrap', padding: '9px 14px', opacity: addingFile ? 0.6 : 1 }}
                 onClick={handleAddFromInput}
+                disabled={addingFile}
               >
-                Add
+                {addingFile ? '...' : 'Add'}
               </button>
             </div>
           </div>
@@ -337,10 +389,6 @@ export function SetupView({
                       key={lib.name}
                       onClick={() => {
                         if (!alreadyAdded) {
-                          // Libraries don't have direct file keys via Plugin API.
-                          // Use the library name as a placeholder key — user will
-                          // need to have the PAT and the file accessible via REST.
-                          // For now, we add it as a reference the user can identify.
                           handleAddFile(lib.name, lib.name);
                         }
                       }}
@@ -456,8 +504,7 @@ export function SetupView({
                     </span>
                     <span style={{
                       flex: 1,
-                      fontFamily: "'SF Mono', 'Fira Code', monospace",
-                      fontSize: '10px',
+                      fontSize: '11px',
                       color: s.colors.textSecondary,
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',

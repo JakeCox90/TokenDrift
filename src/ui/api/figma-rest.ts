@@ -87,6 +87,19 @@ export async function fetchFileStyles(
   }));
 }
 
+/** Fetch the human-readable file name for a given file key */
+export async function fetchFileName(
+  fileKey: string,
+  token: string,
+): Promise<string> {
+  const data = await figmaFetch<{ name: string }>(
+    `/files/${fileKey}?depth=0`,
+    token,
+    fileKey,
+  );
+  return data.name;
+}
+
 /** Fetch both variables and styles, returning a combined token list */
 export async function fetchFileTokens(
   fileKey: string,
