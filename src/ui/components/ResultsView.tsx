@@ -85,7 +85,7 @@ function countIssues(node: TreeNode): number {
 // ─── Components ──────────────────────────────────────────────────────────────
 
 const issueTypeLabels: Record<DriftIssueType, string> = {
-  missing_in_source: 'Missing in source',
+  missing_in_source: 'Missing in this file',
   missing_in_comparison: 'Missing in comparison',
 };
 
@@ -220,7 +220,7 @@ export function ResultsView({ issues, onBack, onRefresh, loading }: ResultsViewP
             )}
             {missingInSource > 0 && (
               <span style={s.badge(s.colors.warningBg, '#996B00')}>
-                {missingInSource} missing in source
+                {missingInSource} missing in this file
               </span>
             )}
           </div>
@@ -242,7 +242,7 @@ export function ResultsView({ issues, onBack, onRefresh, loading }: ResultsViewP
             >
               <option value="all">All types</option>
               <option value="missing_in_comparison">Missing in comparison</option>
-              <option value="missing_in_source">Missing in source</option>
+              <option value="missing_in_source">Missing in this file</option>
             </select>
           </div>
 
