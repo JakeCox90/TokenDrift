@@ -46,23 +46,23 @@ function buildHtml() {
     body {
       font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       font-size: 12px;
-      color: var(--figma-color-text);
-      background: var(--figma-color-bg);
+      color: #1A1A2E;
+      background: #FFFFFF;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
     }
     input:focus, select:focus {
-      border-color: var(--figma-color-border-brand) !important;
-      box-shadow: 0 0 0 3px var(--figma-color-bg-brand-tertiary), inset 0 1px 2px rgba(0,0,0,0.06) !important;
+      border-color: #6C5CE7 !important;
+      box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.12), inset 0 1px 2px rgba(0,0,0,0.06) !important;
     }
-    input::placeholder { color: var(--figma-color-text-tertiary); }
+    input::placeholder { color: #9C9CB5; }
     button:hover:not(:disabled) { filter: brightness(0.95); }
     button:active:not(:disabled) { transform: scale(0.98); }
-    select { -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px !important; }
+    select { -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%239C9CB5' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px !important; }
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: var(--figma-color-border); border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: var(--figma-color-text-tertiary); }
+    ::-webkit-scrollbar-thumb { background: #E8E8F0; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #9C9CB5; }
     @keyframes spin { to { transform: rotate(360deg); } }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
   </style>

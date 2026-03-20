@@ -86,32 +86,12 @@ const tokenTypeIcons: Record<TokenType, string> = {
   GRID_STYLE: 'G',
 };
 
-const tokenTypeColors: Record<TokenType, { text: string; bg: string; border: string }> = {
-  VARIABLE: {
-    text: 'var(--figma-color-text-brand)',
-    bg: 'var(--figma-color-bg-brand-tertiary)',
-    border: 'var(--figma-color-border-brand)',
-  },
-  PAINT_STYLE: {
-    text: 'var(--figma-color-text-danger)',
-    bg: 'var(--figma-color-bg-danger-tertiary)',
-    border: 'var(--figma-color-border-danger)',
-  },
-  TEXT_STYLE: {
-    text: 'var(--figma-color-text-success)',
-    bg: 'var(--figma-color-bg-success-tertiary)',
-    border: 'var(--figma-color-border-success)',
-  },
-  EFFECT_STYLE: {
-    text: 'var(--figma-color-text-warning)',
-    bg: 'var(--figma-color-bg-warning-tertiary)',
-    border: 'var(--figma-color-border-warning)',
-  },
-  GRID_STYLE: {
-    text: 'var(--figma-color-text-secondary)',
-    bg: 'var(--figma-color-bg-tertiary)',
-    border: 'var(--figma-color-border)',
-  },
+const tokenTypeColors: Record<TokenType, string> = {
+  VARIABLE: '#6C5CE7',
+  PAINT_STYLE: '#E74C6F',
+  TEXT_STYLE: '#00B894',
+  EFFECT_STYLE: '#E8A317',
+  GRID_STYLE: '#0984E3',
 };
 
 export function ResultsView({ issues, onBack, onRefresh, loading }: ResultsViewProps) {
@@ -157,13 +137,13 @@ export function ResultsView({ issues, onBack, onRefresh, loading }: ResultsViewP
             marginLeft: 'auto',
             padding: '5px 12px',
             background: loading ? s.colors.bgSecondary : s.colors.brand,
-            color: loading ? s.colors.textMuted : s.colors.textOnBrand,
+            color: loading ? s.colors.textMuted : '#fff',
             border: 'none',
             borderRadius: '6px',
             cursor: loading ? 'not-allowed' : 'pointer',
             fontSize: '11px',
             fontWeight: 600,
-            boxShadow: loading ? 'none' : 'var(--figma-shadow-floating, 0 1px 3px rgba(0,0,0,0.12))',
+            boxShadow: loading ? 'none' : `0 1px 3px rgba(108, 92, 231, 0.3)`,
             transition: 'all 0.15s ease',
           }}
           title="Re-run comparison"
@@ -456,15 +436,15 @@ function IssueRow({ issue, indent }: { issue: DriftIssue; indent: number }) {
         width: '18px',
         height: '18px',
         borderRadius: '5px',
-        background: tokenTypeColors[issue.tokenType].bg,
+        background: tokenTypeColors[issue.tokenType] + '14',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         fontSize: '8px',
         fontWeight: 700,
-        color: tokenTypeColors[issue.tokenType].text,
+        color: tokenTypeColors[issue.tokenType],
         flexShrink: 0,
-        border: `1px solid ${tokenTypeColors[issue.tokenType].border}`,
+        border: `1px solid ${tokenTypeColors[issue.tokenType]}20`,
       }}>
         {tokenTypeIcons[issue.tokenType]}
       </span>

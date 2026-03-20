@@ -62,7 +62,7 @@ export function App() {
     }
   }, [storedRecent]);
 
-  // Fetch linked libraries on mount and poll every 5s for changes
+  // Fetch linked libraries on mount
   useEffect(() => {
     const handler = (event: MessageEvent) => {
       const msg = event.data?.pluginMessage as SandboxToUIMessage | undefined;
@@ -72,15 +72,7 @@ export function App() {
     };
     window.addEventListener('message', handler);
     postToSandbox({ type: 'get-linked-libraries' });
-
-    const interval = setInterval(() => {
-      postToSandbox({ type: 'get-linked-libraries' });
-    }, 5000);
-
-    return () => {
-      window.removeEventListener('message', handler);
-      clearInterval(interval);
-    };
+    return () => window.removeEventListener('message', handler);
   }, []);
 
   const handleConfigChange = useCallback((newConfig: ComparisonConfig) => {
