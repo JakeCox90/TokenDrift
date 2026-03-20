@@ -1,0 +1,87 @@
+// ─── Token & Style Normalisation ─────────────────────────────────────────────
+
+/** The unified shape for both variables and styles from any source */
+export interface NormalisedToken {
+  /** Human-readable name, e.g. "Colour/Content/Text/Default" */
+  name: string;
+  /** What kind of design token this is */
+  type: TokenType;
+  /** Variable collection name (variables only, undefined for styles) */
+  collection?: string;
+  /** Resolved variable type (variables only) */
+  resolvedType?: VariableResolvedType;
+  /** File key or "local" for the current file */
+  sourceFile: string;
+}
+
+export type TokenType =
+  | 'VARIABLE'
+  | 'PAINT_STYLE'
+  | 'TEXT_STYLE'
+  | 'EFFECT_STYLE'
+  | 'GRID_STYLE';
+
+export type VariableResolvedType =
+  | 'BOOLEAN'
+  | 'FLOAT'
+  | 'STRING'
+  | 'COLOR';
+
+// ─── Diff Engine ─────────────────────────────────────────────────────────────
+
+/** A single drift issue found during comparison */
+export interface DriftIssue {
+  /** The kind of discrepancy */
+  type: DriftIssueType;
+  /** What kind of token is affected */
+  tokenType: TokenType;
+  /** Token name in the source file (undefined if missing_in_source) */
+  sourceName?: string;
+  /** Token name in the comparison file (undefined if missing_in_comparison) */
+  comparisonName?: string;
+  /** File key of the source */
+  sourceFile: string;
+  /** File key of the comparison file */
+  comparisonFile: string;
+  /** Collection name (variables only) */
+  collection?: string;
+}
+
+export type DriftIssueType =
+  | 'missing_in_source'
+  | 'missing_in_comparison';
+
+// ─── File & Config ───────────────────────────────────────────────────────────
+
+/** A reference to a Figma file used in comparison */
+export interface FileReference {
+  /** Figma file key (extracted from URL or entered directly) */
+  fileKey: string;
+  /** Human-readable label (file name or user-provided) */
+  label: string;
+}
+
+/** Full comparison configuration persisted in clientStorage */
+export interface ComparisonConfig {
+  /** Whether the source is the current file or an external file */
+  sourceType: 'current' | 'external';
+  /** File key for external source (undefined if sourceType is 'current') */
+  sourceFileKey?: string;
+  /** Files to compare against the source */
+  comparisonFiles: FileReference[];
+}
+
+// ─── Sandbox ↔ UI Messages ──────────────────────────────────────────────────
+
+/** Messages sent from UI to sandbox */
+export type UIToSandboxMessage =
+  | { type: 'get-local-tokens' }
+  | { type: 'get-storage'; key: string }
+  | { type: 'set-storage'; key: string; value: string };
+
+/** Messages sent from sandbox to UI */
+export type SandboxToUIMessage =
+  | { type: 'local-tokens'; tokens: NormalisedToken[] }
+  | { type: 'storage-result'; key: string; value: string | null }
+  | { type: 'storage-set'; key: string; success: boolean }
+  | { type: 'error'; message: string };
