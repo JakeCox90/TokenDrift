@@ -120,19 +120,20 @@ export function SetupView({
 
   const canRun = config.comparisonFiles.length > 0 && !!pat && !loading;
 
-  // Filter recent files to exclude already-added ones
-  const availableRecent = recentFiles.filter(
-    f => !config.comparisonFiles.some(c => c.fileKey === f.fileKey),
-  );
-
   const tabs: { key: CompareTab; label: string; count?: number }[] = [
     { key: 'libraries', label: 'Libraries', count: libraries.length },
-    { key: 'recent', label: 'Recent', count: availableRecent.length },
+    { key: 'recent', label: 'Recent', count: recentFiles.length },
     { key: 'url', label: 'URL' },
   ];
 
   return (
-    <div style={{ padding: '20px', animation: 'fadeIn 0.2s ease' }}>
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100vh',
+      animation: 'fadeIn 0.2s ease',
+    }}>
+    <div style={{ flex: 1, overflow: 'auto', padding: '20px 20px 0' }}>
       {/* Header */}
       <div style={{ marginBottom: '24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
@@ -416,11 +417,12 @@ export function SetupView({
                     <button
                       key={lib.name}
                       onClick={() => {
-                        if (!alreadyAdded) {
+                        if (alreadyAdded) {
+                          handleRemoveFile(lib.name);
+                        } else {
                           handleAddFile({ fileKey: lib.name, label: lib.name });
                         }
                       }}
-                      disabled={alreadyAdded}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -478,7 +480,7 @@ export function SetupView({
         {/* Tab content: Recent */}
         {activeTab === 'recent' && (
           <div>
-            {availableRecent.length === 0 ? (
+            {recentFiles.length === 0 ? (
               <div style={{
                 padding: '20px 16px',
                 textAlign: 'center',
@@ -487,62 +489,89 @@ export function SetupView({
                 border: `1px dashed ${s.colors.border}`,
               }}>
                 <p style={{ fontSize: '11px', color: s.colors.textMuted }}>
-                  {recentFiles.length === 0
-                    ? 'No recent files yet'
-                    : 'All recent files already added'}
+                  No recent files yet
                 </p>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                {availableRecent.map(file => (
-                  <button
-                    key={file.fileKey}
-                    onClick={() => handleAddFile(file)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '10px',
-                      padding: '10px 12px',
-                      background: s.colors.bgSecondary,
-                      borderRadius: '8px',
-                      border: `1px solid ${s.colors.borderLight}`,
-                      cursor: 'pointer',
-                      fontSize: '11px',
-                      fontWeight: 500,
-                      color: s.colors.text,
-                      textAlign: 'left',
-                      width: '100%',
-                      transition: 'all 0.15s ease',
-                    }}
-                  >
-                    <span style={{
-                      width: '22px',
-                      height: '22px',
-                      borderRadius: '6px',
-                      background: s.colors.bgTertiary,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '10px',
-                      color: s.colors.textMuted,
-                      fontWeight: 600,
-                      flexShrink: 0,
-                    }}>
-                      R
-                    </span>
-                    <span style={{
-                      flex: 1,
-                      fontSize: '11px',
-                      color: s.colors.textSecondary,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {file.label}
-                    </span>
-                    <span style={{ fontSize: '14px', color: s.colors.textMuted }}>+</span>
-                  </button>
-                ))}
+                {recentFiles.map(file => {
+                  const alreadyAdded = config.comparisonFiles.some(f => f.fileKey === file.fileKey);
+                  return (
+                    <button
+                      key={file.fileKey}
+                      onClick={() => {
+                        if (alreadyAdded) {
+                          handleRemoveFile(file.fileKey);
+                        } else {
+                          handleAddFile(file);
+                        }
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        padding: '10px 12px',
+                        background: alreadyAdded ? s.colors.bgTertiary : s.colors.bgSecondary,
+                        borderRadius: '8px',
+                        border: `1px solid ${s.colors.borderLight}`,
+                        cursor: 'pointer',
+                        fontSize: '11px',
+                        fontWeight: 500,
+                        color: alreadyAdded ? s.colors.textMuted : s.colors.text,
+                        textAlign: 'left',
+                        width: '100%',
+                        transition: 'all 0.15s ease',
+                        opacity: alreadyAdded ? 0.6 : 1,
+                      }}
+                    >
+                      {file.thumbnailUrl ? (
+                        <img
+                          src={file.thumbnailUrl}
+                          alt=""
+                          style={{
+                            width: '22px',
+                            height: '22px',
+                            borderRadius: '6px',
+                            objectFit: 'cover',
+                            flexShrink: 0,
+                            border: `1px solid ${s.colors.borderLight}`,
+                          }}
+                        />
+                      ) : (
+                        <span style={{
+                          width: '22px',
+                          height: '22px',
+                          borderRadius: '6px',
+                          background: s.colors.bgTertiary,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '10px',
+                          color: s.colors.textMuted,
+                          fontWeight: 600,
+                          flexShrink: 0,
+                        }}>
+                          R
+                        </span>
+                      )}
+                      <span style={{
+                        flex: 1,
+                        fontSize: '11px',
+                        color: alreadyAdded ? s.colors.textMuted : s.colors.textSecondary,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {file.label}
+                      </span>
+                      {alreadyAdded ? (
+                        <span style={{ fontSize: '10px', color: s.colors.success }}>&#10003;</span>
+                      ) : (
+                        <span style={{ fontSize: '14px', color: s.colors.textMuted }}>+</span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -563,59 +592,62 @@ export function SetupView({
           </div>
         )}
 
-        {/* Added files list */}
-        {config.comparisonFiles.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '10px' }}>
-            <div style={{ fontSize: '10px', color: s.colors.textMuted, fontWeight: 600, marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-              Selected ({config.comparisonFiles.length})
-            </div>
-            {config.comparisonFiles.map(file => (
-              <div
-                key={file.fileKey}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  padding: '10px 12px',
-                  background: s.colors.bgSecondary,
-                  borderRadius: '8px',
-                  border: `1px solid ${s.colors.borderLight}`,
-                  fontSize: '11px',
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                {file.thumbnailUrl ? (
-                  <img
-                    src={file.thumbnailUrl}
-                    alt=""
-                    style={{
-                      width: '28px',
-                      height: '28px',
-                      borderRadius: '6px',
-                      objectFit: 'cover',
-                      flexShrink: 0,
-                      border: `1px solid ${s.colors.borderLight}`,
-                    }}
-                  />
-                ) : (
-                  <span style={{
-                    width: '28px',
-                    height: '28px',
-                    borderRadius: '6px',
-                    background: s.colors.brandSubtle,
+        {/* URL-added files (not visible in Libraries or Recent tabs) */}
+        {(() => {
+          const libraryNames = new Set(libraries.map(l => l.name));
+          const recentKeys = new Set(recentFiles.map(r => r.fileKey));
+          const urlOnly = config.comparisonFiles.filter(
+            f => !libraryNames.has(f.fileKey) && !recentKeys.has(f.fileKey),
+          );
+          if (urlOnly.length === 0) return null;
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '10px' }}>
+              {urlOnly.map(file => (
+                <div
+                  key={file.fileKey}
+                  style={{
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '10px',
-                    color: s.colors.brand,
-                    fontWeight: 700,
-                    flexShrink: 0,
-                  }}>
-                    F
-                  </span>
-                )}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{
+                    gap: '10px',
+                    padding: '10px 12px',
+                    background: s.colors.bgTertiary,
+                    borderRadius: '8px',
+                    border: `1px solid ${s.colors.borderLight}`,
+                    fontSize: '11px',
+                  }}
+                >
+                  {file.thumbnailUrl ? (
+                    <img
+                      src={file.thumbnailUrl}
+                      alt=""
+                      style={{
+                        width: '22px',
+                        height: '22px',
+                        borderRadius: '6px',
+                        objectFit: 'cover',
+                        flexShrink: 0,
+                        border: `1px solid ${s.colors.borderLight}`,
+                      }}
+                    />
+                  ) : (
+                    <span style={{
+                      width: '22px',
+                      height: '22px',
+                      borderRadius: '6px',
+                      background: s.colors.brandSubtle,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '10px',
+                      color: s.colors.brand,
+                      fontWeight: 700,
+                      flexShrink: 0,
+                    }}>
+                      F
+                    </span>
+                  )}
+                  <span style={{
+                    flex: 1,
                     fontSize: '11px',
                     fontWeight: 500,
                     color: s.colors.text,
@@ -624,49 +656,26 @@ export function SetupView({
                     whiteSpace: 'nowrap',
                   }}>
                     {file.label}
-                  </div>
-                  {file.fileKey !== file.label && (
-                    <div style={{
-                      fontSize: '9px',
+                  </span>
+                  <button
+                    onClick={() => handleRemoveFile(file.fileKey)}
+                    style={{
+                      ...s.buttonGhost,
+                      padding: '2px 6px',
+                      fontSize: '14px',
+                      lineHeight: 1,
                       color: s.colors.textMuted,
-                      marginTop: '1px',
-                    }}>
-                      File
-                    </div>
-                  )}
+                      borderRadius: '4px',
+                    }}
+                    title="Remove"
+                  >
+                    ×
+                  </button>
                 </div>
-                <button
-                  onClick={() => handleRemoveFile(file.fileKey)}
-                  style={{
-                    ...s.buttonGhost,
-                    padding: '2px 6px',
-                    fontSize: '14px',
-                    lineHeight: 1,
-                    color: s.colors.textMuted,
-                    borderRadius: '4px',
-                  }}
-                  title="Remove"
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {config.comparisonFiles.length === 0 && activeTab === 'url' && (
-          <div style={{
-            padding: '16px',
-            textAlign: 'center',
-            background: s.colors.bgSecondary,
-            borderRadius: '8px',
-            border: `1px dashed ${s.colors.border}`,
-          }}>
-            <p style={{ fontSize: '11px', color: s.colors.textMuted }}>
-              No files added yet
-            </p>
-          </div>
-        )}
+              ))}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Match strategy */}
@@ -693,14 +702,23 @@ export function SetupView({
         </p>
       </div>
 
-      {/* Run button */}
-      <button
-        style={canRun ? s.button : s.buttonDisabled}
-        onClick={canRun ? onRunComparison : undefined}
-        disabled={!canRun}
-      >
-        {loading ? 'Comparing...' : 'Run Comparison'}
-      </button>
+      </div>
+
+      {/* Run button — fixed to bottom */}
+      <div style={{
+        padding: '12px 20px 20px',
+        background: s.colors.bg,
+        borderTop: `1px solid ${s.colors.borderLight}`,
+        flexShrink: 0,
+      }}>
+        <button
+          style={canRun ? s.button : s.buttonDisabled}
+          onClick={canRun ? onRunComparison : undefined}
+          disabled={!canRun}
+        >
+          {loading ? 'Comparing...' : 'Run Comparison'}
+        </button>
+      </div>
     </div>
   );
 }
