@@ -35,6 +35,12 @@ export function SetupView({
   const [patInput, setPatInput] = useState('');
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<CompareTab>('libraries');
+  const handleTabChange = (tab: CompareTab) => {
+    setActiveTab(tab);
+    if (tab === 'libraries') {
+      onRefreshLibraries();
+    }
+  };
   const [showSettings, setShowSettings] = useState(false);
   const [showMatchSettings, setShowMatchSettings] = useState(false);
   const [addingFile, setAddingFile] = useState(false);
@@ -316,7 +322,7 @@ export function SetupView({
           {tabs.map(tab => (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => handleTabChange(tab.key)}
               style={{
                 flex: 1,
                 padding: '6px 8px',
