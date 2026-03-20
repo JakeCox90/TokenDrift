@@ -87,6 +87,7 @@ export function App() {
             compTokens,
             sourceFile,
             compFile.fileKey,
+            { matchStrategy: config.matchStrategy ?? 'ignore_first_segment' },
           );
           allIssues.push(...fileIssues);
         } catch (err) {

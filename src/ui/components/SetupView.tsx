@@ -1,5 +1,5 @@
 import { useState } from 'preact/hooks';
-import type { FileReference, ComparisonConfig } from '../../types';
+import type { FileReference, ComparisonConfig, MatchStrategy } from '../../types';
 import { extractFileKey } from '../utils/figma-url';
 import * as s from '../styles';
 
@@ -223,6 +223,27 @@ export function SetupView({
             </button>
           </div>
         ))}
+      </div>
+
+      {/* Match strategy */}
+      <div style={s.section}>
+        <label style={s.label}>Token matching</label>
+        <select
+          style={s.input}
+          value={config.matchStrategy ?? 'ignore_first_segment'}
+          onChange={(e) =>
+            onConfigChange({
+              ...config,
+              matchStrategy: (e.target as HTMLSelectElement).value as MatchStrategy,
+            })
+          }
+        >
+          <option value="ignore_first_segment">Ignore first path segment (recommended)</option>
+          <option value="full_name">Exact full name</option>
+        </select>
+        <p style={{ fontSize: '10px', color: s.colors.textMuted, marginTop: '4px' }}>
+          "Ignore first segment" matches colour/primary/resting with thesun/primary/resting.
+        </p>
       </div>
 
       {/* Run button */}

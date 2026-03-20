@@ -61,6 +61,11 @@ export interface FileReference {
   label: string;
 }
 
+/** How tokens are matched across files */
+export type MatchStrategy =
+  | 'full_name'
+  | 'ignore_first_segment';
+
 /** Full comparison configuration persisted in clientStorage */
 export interface ComparisonConfig {
   /** Whether the source is the current file or an external file */
@@ -69,6 +74,8 @@ export interface ComparisonConfig {
   sourceFileKey?: string;
   /** Files to compare against the source */
   comparisonFiles: FileReference[];
+  /** How to match token names across files (default: ignore_first_segment) */
+  matchStrategy?: MatchStrategy;
 }
 
 // ─── Sandbox ↔ UI Messages ──────────────────────────────────────────────────

@@ -1,4 +1,9 @@
-import type { NormalisedToken, DriftIssue, DriftIssueType, TokenType } from '../../types';
+import type { NormalisedToken, DriftIssue, TokenType, MatchStrategy } from '../../types';
+
+export interface CompareOptions {
+  /** How to match token names. Default: 'ignore_first_segment' */
+  matchStrategy?: MatchStrategy;
+}
 
 /**
  * Compare source tokens against comparison tokens and return drift issues.
@@ -9,13 +14,15 @@ export function compareTokens(
   comparison: NormalisedToken[],
   sourceFile: string,
   comparisonFile: string,
+  options: CompareOptions = {},
 ): DriftIssue[] {
+  const strategy = options.matchStrategy ?? 'ignore_first_segment';
   const issues: DriftIssue[] = [];
 
   const sourceVariables = source.filter(t => t.type === 'VARIABLE');
   const comparisonVariables = comparison.filter(t => t.type === 'VARIABLE');
   issues.push(
-    ...diffVariables(sourceVariables, comparisonVariables, sourceFile, comparisonFile),
+    ...diffTokens(sourceVariables, comparisonVariables, sourceFile, comparisonFile, strategy, true),
   );
 
   const styleTypes: TokenType[] = ['PAINT_STYLE', 'TEXT_STYLE', 'EFFECT_STYLE', 'GRID_STYLE'];
@@ -23,30 +30,37 @@ export function compareTokens(
     const sourceStyles = source.filter(t => t.type === styleType);
     const comparisonStyles = comparison.filter(t => t.type === styleType);
     issues.push(
-      ...diffStyles(sourceStyles, comparisonStyles, styleType, sourceFile, comparisonFile),
+      ...diffTokens(sourceStyles, comparisonStyles, sourceFile, comparisonFile, strategy, false),
     );
   }
 
   return issues;
 }
 
-/** Match variables by collection + name */
-function diffVariables(
+/**
+ * Diff two sets of tokens using the given match strategy.
+ * When isVariable=true, the collection is included in the match key (for full_name strategy).
+ */
+function diffTokens(
   source: NormalisedToken[],
   comparison: NormalisedToken[],
   sourceFile: string,
   comparisonFile: string,
+  strategy: MatchStrategy,
+  isVariable: boolean,
 ): DriftIssue[] {
   const issues: DriftIssue[] = [];
 
+  const makeKey = (t: NormalisedToken) => matchKey(t, strategy, isVariable);
+
   const sourceKeys = new Map<string, NormalisedToken>();
   for (const t of source) {
-    sourceKeys.set(variableKey(t), t);
+    sourceKeys.set(makeKey(t), t);
   }
 
   const comparisonKeys = new Map<string, NormalisedToken>();
   for (const t of comparison) {
-    comparisonKeys.set(variableKey(t), t);
+    comparisonKeys.set(makeKey(t), t);
   }
 
   // Missing in comparison
@@ -54,7 +68,7 @@ function diffVariables(
     if (!comparisonKeys.has(key)) {
       issues.push({
         type: 'missing_in_comparison',
-        tokenType: 'VARIABLE',
+        tokenType: token.type,
         sourceName: token.name,
         sourceFile,
         comparisonFile,
@@ -68,7 +82,7 @@ function diffVariables(
     if (!sourceKeys.has(key)) {
       issues.push({
         type: 'missing_in_source',
-        tokenType: 'VARIABLE',
+        tokenType: token.type,
         comparisonName: token.name,
         sourceFile,
         comparisonFile,
@@ -80,53 +94,49 @@ function diffVariables(
   return issues;
 }
 
-/** Match styles by name */
-function diffStyles(
-  source: NormalisedToken[],
-  comparison: NormalisedToken[],
-  tokenType: TokenType,
-  sourceFile: string,
-  comparisonFile: string,
-): DriftIssue[] {
-  const issues: DriftIssue[] = [];
+/**
+ * Produce the match key for a token based on the strategy.
+ *
+ * - full_name: match on the exact name (and collection for variables)
+ *   e.g. "colour/primary/resting" !== "thesun/primary/resting"
+ *
+ * - ignore_first_segment: strip the first path segment before matching
+ *   e.g. "colour/primary/resting" → "primary/resting"
+ *        "thesun/primary/resting" → "primary/resting"  ← these match
+ */
+function matchKey(
+  token: NormalisedToken,
+  strategy: MatchStrategy,
+  includeCollection: boolean,
+): string {
+  const name = strategy === 'ignore_first_segment'
+    ? stripFirstSegment(token.name)
+    : token.name;
 
-  const sourceNames = new Map<string, NormalisedToken>();
-  for (const t of source) {
-    sourceNames.set(t.name, t);
+  if (includeCollection && strategy === 'full_name') {
+    return `${token.collection ?? ''}::${name}`;
   }
 
-  const comparisonNames = new Map<string, NormalisedToken>();
-  for (const t of comparison) {
-    comparisonNames.set(t.name, t);
-  }
-
-  for (const [name] of sourceNames) {
-    if (!comparisonNames.has(name)) {
-      issues.push({
-        type: 'missing_in_comparison',
-        tokenType,
-        sourceName: name,
-        sourceFile,
-        comparisonFile,
-      });
-    }
-  }
-
-  for (const [name] of comparisonNames) {
-    if (!sourceNames.has(name)) {
-      issues.push({
-        type: 'missing_in_source',
-        tokenType,
-        comparisonName: name,
-        sourceFile,
-        comparisonFile,
-      });
-    }
-  }
-
-  return issues;
+  return name;
 }
 
-function variableKey(token: NormalisedToken): string {
-  return `${token.collection ?? ''}::${token.name}`;
+/**
+ * Strip the first segment from a path separated by `/` or `.`
+ * "colour/primary/resting" → "primary/resting"
+ * "thesun.primary.resting" → "primary.resting"
+ * "single" → "single" (no separator, return as-is)
+ */
+export function stripFirstSegment(name: string): string {
+  // Try `/` first (Figma variable convention), then `.`
+  const slashIndex = name.indexOf('/');
+  if (slashIndex !== -1 && slashIndex < name.length - 1) {
+    return name.slice(slashIndex + 1);
+  }
+
+  const dotIndex = name.indexOf('.');
+  if (dotIndex !== -1 && dotIndex < name.length - 1) {
+    return name.slice(dotIndex + 1);
+  }
+
+  return name;
 }
