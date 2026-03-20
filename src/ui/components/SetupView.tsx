@@ -706,11 +706,14 @@ export function SetupView({
               }
             >
               <option value="ignore_first_segment">Ignore top-level group (recommended)</option>
+              <option value="ignore_first_two_segments">Ignore top two groups</option>
               <option value="full_name">Exact full name</option>
             </select>
             <p style={{ fontSize: '10px', color: s.colors.textMuted, marginTop: '6px', lineHeight: 1.4 }}>
               {config.matchStrategy === 'full_name'
                 ? 'Tokens must have identical names to match. Brand/primary/resting will not match TheSun/primary/resting.'
+                : config.matchStrategy === 'ignore_first_two_segments'
+                ? 'Ignores the first two variable groups when matching. e.g. Brand/Colour/primary/resting and TheSun/Colors/primary/resting both match on primary/resting.'
                 : 'Ignores the top-level variable group when matching. e.g. Brand/primary/resting and TheSun/primary/resting both match on primary/resting.'
               }
             </p>

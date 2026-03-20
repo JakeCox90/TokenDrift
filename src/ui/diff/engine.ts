@@ -109,9 +109,14 @@ function matchKey(
   strategy: MatchStrategy,
   includeCollection: boolean,
 ): string {
-  const name = strategy === 'ignore_first_segment'
-    ? stripFirstSegment(token.name)
-    : token.name;
+  let name: string;
+  if (strategy === 'ignore_first_segment') {
+    name = stripFirstSegment(token.name);
+  } else if (strategy === 'ignore_first_two_segments') {
+    name = stripFirstSegment(stripFirstSegment(token.name));
+  } else {
+    name = token.name;
+  }
 
   if (includeCollection && strategy === 'full_name') {
     return `${token.collection ?? ''}::${name}`;

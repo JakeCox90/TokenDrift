@@ -66,7 +66,8 @@ export interface FileReference {
 /** How tokens are matched across files */
 export type MatchStrategy =
   | 'full_name'
-  | 'ignore_first_segment';
+  | 'ignore_first_segment'
+  | 'ignore_first_two_segments';
 
 /** Full comparison configuration persisted in clientStorage */
 export interface ComparisonConfig {
