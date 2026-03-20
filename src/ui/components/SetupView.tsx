@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'preact/hooks';
 import type { FileReference, ComparisonConfig, MatchStrategy, LinkedLibrary } from '../../types';
 import { extractFileKey } from '../utils/figma-url';
-import { fetchFileName } from '../api/figma-rest';
+import { fetchFileInfo } from '../api/figma-rest';
 import * as s from '../styles';
 
 type CompareTab = 'url' | 'libraries' | 'recent';
@@ -38,16 +38,15 @@ export function SetupView({
   const [showSettings, setShowSettings] = useState(false);
   const [addingFile, setAddingFile] = useState(false);
 
-  const handleAddFile = (fileKey: string, label: string) => {
-    if (config.comparisonFiles.some(f => f.fileKey === fileKey)) {
+  const handleAddFile = (file: FileReference) => {
+    if (config.comparisonFiles.some(f => f.fileKey === file.fileKey)) {
       setError('File already added');
       return;
     }
     setError('');
-    const newFile: FileReference = { fileKey, label };
     onConfigChange({
       ...config,
-      comparisonFiles: [...config.comparisonFiles, newFile],
+      comparisonFiles: [...config.comparisonFiles, file],
     });
   };
 
@@ -58,23 +57,22 @@ export function SetupView({
       return;
     }
 
-    // Fetch the file name from the API for a readable label
-    if (pat) {
-      setAddingFile(true);
-      setError('');
-      try {
-        const name = await fetchFileName(key, pat);
-        handleAddFile(key, name);
-      } catch {
-        // Fall back to file key if name fetch fails
-        handleAddFile(key, key);
-      } finally {
-        setAddingFile(false);
-      }
-    } else {
-      handleAddFile(key, key);
+    if (!pat) {
+      setError('Save an access token first');
+      return;
     }
-    setFileInput('');
+
+    setAddingFile(true);
+    setError('');
+    try {
+      const info = await fetchFileInfo(key, pat);
+      handleAddFile({ fileKey: key, label: info.name, thumbnailUrl: info.thumbnailUrl });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch file info');
+    } finally {
+      setAddingFile(false);
+      setFileInput('');
+    }
   };
 
   const handleRemoveFile = (fileKey: string) => {
@@ -92,7 +90,7 @@ export function SetupView({
     setShowSettings(false);
   };
 
-  // Resolve file names for any entries that still have the key as label
+  // Resolve file info for any entries that still have the key as label
   const resolvedRef = useRef(new Set<string>());
   useEffect(() => {
     if (!pat) return;
@@ -103,12 +101,14 @@ export function SetupView({
 
     for (const file of unresolved) {
       resolvedRef.current.add(file.fileKey);
-      fetchFileName(file.fileKey, pat)
-        .then(name => {
+      fetchFileInfo(file.fileKey, pat)
+        .then(info => {
           onConfigChange({
             ...config,
             comparisonFiles: config.comparisonFiles.map(f =>
-              f.fileKey === file.fileKey ? { ...f, label: name } : f,
+              f.fileKey === file.fileKey
+                ? { ...f, label: info.name, thumbnailUrl: info.thumbnailUrl }
+                : f,
             ),
           });
         })
@@ -415,7 +415,7 @@ export function SetupView({
                       key={lib.name}
                       onClick={() => {
                         if (!alreadyAdded) {
-                          handleAddFile(lib.name, lib.name);
+                          handleAddFile({ fileKey: lib.name, label: lib.name });
                         }
                       }}
                       disabled={alreadyAdded}
@@ -495,7 +495,7 @@ export function SetupView({
                 {availableRecent.map(file => (
                   <button
                     key={file.fileKey}
-                    onClick={() => handleAddFile(file.fileKey, file.label)}
+                    onClick={() => handleAddFile(file)}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -572,9 +572,9 @@ export function SetupView({
                 key={file.fileKey}
                 style={{
                   display: 'flex',
-                  justifyContent: 'space-between',
                   alignItems: 'center',
-                  padding: '8px 12px',
+                  gap: '10px',
+                  padding: '10px 12px',
                   background: s.colors.bgSecondary,
                   borderRadius: '8px',
                   border: `1px solid ${s.colors.borderLight}`,
@@ -582,11 +582,37 @@ export function SetupView({
                   transition: 'all 0.15s ease',
                 }}
               >
-                <div style={{
-                  flex: 1,
-                  minWidth: 0,
-                  overflow: 'hidden',
-                }}>
+                {file.thumbnailUrl ? (
+                  <img
+                    src={file.thumbnailUrl}
+                    alt=""
+                    style={{
+                      width: '28px',
+                      height: '28px',
+                      borderRadius: '6px',
+                      objectFit: 'cover',
+                      flexShrink: 0,
+                      border: `1px solid ${s.colors.borderLight}`,
+                    }}
+                  />
+                ) : (
+                  <span style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '6px',
+                    background: s.colors.brandSubtle,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '10px',
+                    color: s.colors.brand,
+                    fontWeight: 700,
+                    flexShrink: 0,
+                  }}>
+                    F
+                  </span>
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
                     fontSize: '11px',
                     fontWeight: 500,
@@ -599,15 +625,11 @@ export function SetupView({
                   </div>
                   {file.fileKey !== file.label && (
                     <div style={{
-                      fontFamily: "'SF Mono', 'Fira Code', monospace",
                       fontSize: '9px',
                       color: s.colors.textMuted,
                       marginTop: '1px',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
                     }}>
-                      {file.fileKey}
+                      File
                     </div>
                   )}
                 </div>

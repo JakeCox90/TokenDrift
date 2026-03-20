@@ -59,6 +59,8 @@ export interface FileReference {
   fileKey: string;
   /** Human-readable label (file name or user-provided) */
   label: string;
+  /** Thumbnail URL from Figma API */
+  thumbnailUrl?: string;
 }
 
 /** How tokens are matched across files */

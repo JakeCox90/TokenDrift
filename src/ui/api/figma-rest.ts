@@ -87,17 +87,17 @@ export async function fetchFileStyles(
   }));
 }
 
-/** Fetch the human-readable file name for a given file key */
-export async function fetchFileName(
+/** Fetch file metadata (name + thumbnail) for a given file key */
+export async function fetchFileInfo(
   fileKey: string,
   token: string,
-): Promise<string> {
-  const data = await figmaFetch<{ name: string }>(
+): Promise<{ name: string; thumbnailUrl?: string }> {
+  const data = await figmaFetch<{ name: string; thumbnailUrl?: string }>(
     `/files/${fileKey}?depth=0`,
     token,
     fileKey,
   );
-  return data.name;
+  return { name: data.name, thumbnailUrl: data.thumbnailUrl };
 }
 
 /** Fetch both variables and styles, returning a combined token list */
