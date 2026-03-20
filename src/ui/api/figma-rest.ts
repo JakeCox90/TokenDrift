@@ -93,7 +93,7 @@ export async function fetchFileInfo(
   token: string,
 ): Promise<{ name: string; thumbnailUrl?: string }> {
   const data = await figmaFetch<{ name: string; thumbnailUrl?: string }>(
-    `/files/${fileKey}?depth=0`,
+    `/files/${fileKey}?depth=1`,
     token,
     fileKey,
   );
