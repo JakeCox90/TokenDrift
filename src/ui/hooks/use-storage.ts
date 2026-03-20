@@ -9,6 +9,7 @@ function postToSandbox(msg: unknown): void {
 /**
  * Read/write a value in Figma clientStorage via the plugin sandbox.
  * Returns [value, setValue, isLoading].
+ * Times out after 2s so the UI never gets stuck on "Loading".
  */
 export function useStorage(
   key: string,
@@ -17,23 +18,34 @@ export function useStorage(
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let settled = false;
+
     const handler = (event: MessageEvent) => {
-      const msg = event.data.pluginMessage as SandboxToUIMessage | undefined;
+      // Figma wraps messages in event.data.pluginMessage
+      const msg = event.data?.pluginMessage as SandboxToUIMessage | undefined;
       if (!msg) return;
 
       if (msg.type === 'storage-result' && msg.key === key) {
+        settled = true;
         setValueState(msg.value);
         setLoading(false);
-      }
-      if (msg.type === 'storage-set' && msg.key === key) {
-        // Confirmed write
       }
     };
 
     window.addEventListener('message', handler);
     postToSandbox({ type: 'get-storage', key });
 
-    return () => window.removeEventListener('message', handler);
+    // Timeout — don't block the UI forever if sandbox doesn't respond
+    const timeout = setTimeout(() => {
+      if (!settled) {
+        setLoading(false);
+      }
+    }, 2000);
+
+    return () => {
+      window.removeEventListener('message', handler);
+      clearTimeout(timeout);
+    };
   }, [key]);
 
   const setValue = useCallback(
