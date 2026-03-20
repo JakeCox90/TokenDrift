@@ -78,17 +78,29 @@ export interface ComparisonConfig {
   matchStrategy?: MatchStrategy;
 }
 
+// ─── Libraries ──────────────────────────────────────────────────────────────
+
+/** A linked library visible to the current file */
+export interface LinkedLibrary {
+  /** Library display name */
+  name: string;
+  /** Variable collection keys belonging to this library */
+  collectionKeys: string[];
+}
+
 // ─── Sandbox ↔ UI Messages ──────────────────────────────────────────────────
 
 /** Messages sent from UI to sandbox */
 export type UIToSandboxMessage =
   | { type: 'get-local-tokens' }
+  | { type: 'get-linked-libraries' }
   | { type: 'get-storage'; key: string }
   | { type: 'set-storage'; key: string; value: string };
 
 /** Messages sent from sandbox to UI */
 export type SandboxToUIMessage =
   | { type: 'local-tokens'; tokens: NormalisedToken[] }
+  | { type: 'linked-libraries'; libraries: LinkedLibrary[] }
   | { type: 'storage-result'; key: string; value: string | null }
   | { type: 'storage-set'; key: string; success: boolean }
   | { type: 'error'; message: string };

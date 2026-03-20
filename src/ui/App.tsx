@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'preact/hooks';
-import type { ComparisonConfig, DriftIssue, NormalisedToken, SandboxToUIMessage } from '../types';
+import type { ComparisonConfig, DriftIssue, NormalisedToken, SandboxToUIMessage, LinkedLibrary, FileReference } from '../types';
 import { compareTokens } from './diff/engine';
 import { fetchFileTokens, FigmaApiError } from './api/figma-rest';
 import { useStorage } from './hooks/use-storage';
@@ -14,6 +14,8 @@ const DEFAULT_CONFIG: ComparisonConfig = {
   comparisonFiles: [],
 };
 
+const MAX_RECENT_FILES = 5;
+
 function postToSandbox(msg: unknown): void {
   parent.postMessage({ pluginMessage: msg }, '*');
 }
@@ -24,12 +26,17 @@ export function App() {
   const [issues, setIssues] = useState<DriftIssue[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [libraries, setLibraries] = useState<LinkedLibrary[]>([]);
+  const [recentFiles, setRecentFilesState] = useState<FileReference[]>([]);
 
   // PAT stored in clientStorage
   const [pat, setPat, patLoading] = useStorage('figma-pat');
 
   // Persist config in clientStorage
   const [storedConfig, setStoredConfig] = useStorage('comparison-config');
+
+  // Recent files stored in clientStorage
+  const [storedRecent, setStoredRecent] = useStorage('recent-files');
 
   // Load persisted config on mount
   useEffect(() => {
@@ -43,6 +50,31 @@ export function App() {
     }
   }, [storedConfig]);
 
+  // Load recent files on mount
+  useEffect(() => {
+    if (storedRecent) {
+      try {
+        const parsed = JSON.parse(storedRecent) as FileReference[];
+        setRecentFilesState(parsed);
+      } catch {
+        // Invalid stored recent files
+      }
+    }
+  }, [storedRecent]);
+
+  // Fetch linked libraries on mount
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      const msg = event.data?.pluginMessage as SandboxToUIMessage | undefined;
+      if (msg && msg.type === 'linked-libraries') {
+        setLibraries(msg.libraries);
+      }
+    };
+    window.addEventListener('message', handler);
+    postToSandbox({ type: 'get-linked-libraries' });
+    return () => window.removeEventListener('message', handler);
+  }, []);
+
   const handleConfigChange = useCallback((newConfig: ComparisonConfig) => {
     setConfig(newConfig);
     setStoredConfig(JSON.stringify(newConfig));
@@ -51,6 +83,16 @@ export function App() {
   const handlePatChange = useCallback((newPat: string) => {
     setPat(newPat);
   }, [setPat]);
+
+  /** Add a file to the recent files list (deduplicated, max 5) */
+  const addToRecent = useCallback((file: FileReference) => {
+    setRecentFilesState(prev => {
+      const filtered = prev.filter(f => f.fileKey !== file.fileKey);
+      const updated = [file, ...filtered].slice(0, MAX_RECENT_FILES);
+      setStoredRecent(JSON.stringify(updated));
+      return updated;
+    });
+  }, [setStoredRecent]);
 
   // Run comparison
   const handleRunComparison = useCallback(async () => {
@@ -80,6 +122,9 @@ export function App() {
       const allIssues: DriftIssue[] = [];
 
       for (const compFile of config.comparisonFiles) {
+        // Track in recent files
+        addToRecent(compFile);
+
         try {
           const compTokens = await fetchFileTokens(compFile.fileKey, pat);
           const fileIssues = compareTokens(
@@ -112,7 +157,7 @@ export function App() {
     } finally {
       setLoading(false);
     }
-  }, [config, pat]);
+  }, [config, pat, addToRecent]);
 
   if (patLoading) {
     return (
@@ -163,6 +208,8 @@ export function App() {
           onPatChange={handlePatChange}
           onRunComparison={handleRunComparison}
           loading={loading}
+          libraries={libraries}
+          recentFiles={recentFiles}
         />
       )}
 

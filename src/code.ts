@@ -1,5 +1,5 @@
 /// <reference types="@figma/plugin-typings" />
-import type { UIToSandboxMessage, SandboxToUIMessage, NormalisedToken } from './types';
+import type { UIToSandboxMessage, SandboxToUIMessage, NormalisedToken, LinkedLibrary } from './types';
 
 figma.showUI(__html__, { width: 480, height: 600 });
 
@@ -9,6 +9,15 @@ figma.ui.onmessage = async (msg: UIToSandboxMessage) => {
       try {
         const tokens = await getLocalTokens();
         sendToUI({ type: 'local-tokens', tokens });
+      } catch (err) {
+        sendToUI({ type: 'error', message: String(err) });
+      }
+      break;
+    }
+    case 'get-linked-libraries': {
+      try {
+        const libraries = await getLinkedLibraries();
+        sendToUI({ type: 'linked-libraries', libraries });
       } catch (err) {
         sendToUI({ type: 'error', message: String(err) });
       }
@@ -87,4 +96,24 @@ async function getLocalTokens(): Promise<NormalisedToken[]> {
   }
 
   return tokens;
+}
+
+async function getLinkedLibraries(): Promise<LinkedLibrary[]> {
+  const collections = await figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync();
+
+  // Group collections by library name
+  const libraryMap = new Map<string, string[]>();
+  for (const c of collections) {
+    if (!libraryMap.has(c.libraryName)) {
+      libraryMap.set(c.libraryName, []);
+    }
+    libraryMap.get(c.libraryName)!.push(c.key);
+  }
+
+  const libraries: LinkedLibrary[] = [];
+  for (const [name, collectionKeys] of libraryMap) {
+    libraries.push({ name, collectionKeys });
+  }
+
+  return libraries;
 }
