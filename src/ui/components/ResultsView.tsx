@@ -7,17 +7,84 @@ interface ResultsViewProps {
   onBack: () => void;
 }
 
+// ─── Tree Structure ──────────────────────────────────────────────────────────
+
+interface TreeNode {
+  segment: string;
+  children: Map<string, TreeNode>;
+  issues: DriftIssue[];
+}
+
+function createNode(segment: string): TreeNode {
+  return { segment, children: new Map(), issues: [] };
+}
+
+/**
+ * Build a tree from issues:
+ *   Collection (or style type) → path segment → ... → leaf issue
+ */
+function buildTree(issues: DriftIssue[]): TreeNode {
+  const root = createNode('root');
+
+  for (const issue of issues) {
+    const name = issue.sourceName ?? issue.comparisonName ?? 'Unknown';
+
+    // Top-level group: collection for variables, style type label for styles
+    const groupName = issue.collection
+      ? issue.collection
+      : styleTypeGroupLabel(issue.tokenType);
+
+    // Get or create the group node
+    if (!root.children.has(groupName)) {
+      root.children.set(groupName, createNode(groupName));
+    }
+    const groupNode = root.children.get(groupName)!;
+
+    // Split name into path segments using / or .
+    const separator = name.includes('/') ? '/' : '.';
+    const segments = name.split(separator);
+
+    // Walk down the tree, creating intermediate nodes
+    let current = groupNode;
+    for (let i = 0; i < segments.length - 1; i++) {
+      const seg = segments[i];
+      if (!current.children.has(seg)) {
+        current.children.set(seg, createNode(seg));
+      }
+      current = current.children.get(seg)!;
+    }
+
+    // Attach the issue at the leaf
+    current.issues.push(issue);
+  }
+
+  return root;
+}
+
+function styleTypeGroupLabel(tokenType: TokenType): string {
+  switch (tokenType) {
+    case 'PAINT_STYLE': return 'Paint Styles';
+    case 'TEXT_STYLE': return 'Text Styles';
+    case 'EFFECT_STYLE': return 'Effect Styles';
+    case 'GRID_STYLE': return 'Grid Styles';
+    case 'VARIABLE': return 'Variables';
+  }
+}
+
+/** Count all issues under a node (recursively) */
+function countIssues(node: TreeNode): number {
+  let count = node.issues.length;
+  for (const child of node.children.values()) {
+    count += countIssues(child);
+  }
+  return count;
+}
+
+// ─── Components ──────────────────────────────────────────────────────────────
+
 const issueTypeLabels: Record<DriftIssueType, string> = {
   missing_in_source: 'Missing in source',
   missing_in_comparison: 'Missing in comparison',
-};
-
-const tokenTypeLabels: Record<TokenType, string> = {
-  VARIABLE: 'Variable',
-  PAINT_STYLE: 'Paint style',
-  TEXT_STYLE: 'Text style',
-  EFFECT_STYLE: 'Effect style',
-  GRID_STYLE: 'Grid style',
 };
 
 const tokenTypeIcons: Record<TokenType, string> = {
@@ -42,17 +109,12 @@ export function ResultsView({ issues, onBack }: ResultsViewProps) {
     return true;
   });
 
-  // Group by comparison file
-  const grouped = new Map<string, DriftIssue[]>();
-  for (const issue of filtered) {
-    const key = issue.comparisonFile;
-    if (!grouped.has(key)) grouped.set(key, []);
-    grouped.get(key)!.push(issue);
-  }
-
   // Summary counts
   const missingInSource = issues.filter(i => i.type === 'missing_in_source').length;
   const missingInComparison = issues.filter(i => i.type === 'missing_in_comparison').length;
+
+  // Build tree from filtered issues
+  const tree = buildTree(filtered);
 
   return (
     <div style={{ padding: '16px' }}>
@@ -146,25 +208,9 @@ export function ResultsView({ issues, onBack }: ResultsViewProps) {
             </p>
           )}
 
-          {/* Grouped results */}
-          {Array.from(grouped.entries()).map(([fileKey, fileIssues]) => (
-            <div key={fileKey} style={{ marginBottom: '12px' }}>
-              <div style={{
-                fontSize: '11px',
-                fontWeight: 600,
-                color: s.colors.textSecondary,
-                padding: '4px 0',
-                borderBottom: `1px solid ${s.colors.border}`,
-                marginBottom: '4px',
-                fontFamily: 'monospace',
-              }}>
-                {fileKey}
-              </div>
-
-              {fileIssues.map((issue, i) => (
-                <IssueRow key={`${fileKey}-${i}`} issue={issue} />
-              ))}
-            </div>
+          {/* Tree */}
+          {Array.from(tree.children.entries()).map(([name, node]) => (
+            <CollectionSection key={name} node={node} depth={0} />
           ))}
 
           {filtered.length === 0 && (
@@ -178,8 +224,150 @@ export function ResultsView({ issues, onBack }: ResultsViewProps) {
   );
 }
 
-function IssueRow({ issue }: { issue: DriftIssue }) {
-  const name = issue.sourceName ?? issue.comparisonName ?? 'Unknown';
+/** Expandable section for a tree node (collection or path segment) */
+function CollectionSection({ node, depth }: { node: TreeNode; depth: number }) {
+  const [expanded, setExpanded] = useState(depth < 1);
+  const total = countIssues(node);
+  const isTopLevel = depth === 0;
+
+  return (
+    <div style={{ marginBottom: isTopLevel ? '8px' : '0' }}>
+      {/* Section header */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          width: '100%',
+          padding: isTopLevel ? '8px 8px' : '4px 8px',
+          background: isTopLevel ? s.colors.bgSecondary : 'transparent',
+          border: 'none',
+          borderRadius: isTopLevel ? '6px' : '0',
+          cursor: 'pointer',
+          fontSize: isTopLevel ? '12px' : '11px',
+          fontWeight: isTopLevel ? 600 : 500,
+          color: s.colors.text,
+          textAlign: 'left',
+          marginLeft: isTopLevel ? 0 : depth * 12,
+        }}
+      >
+        <span style={{
+          fontSize: '9px',
+          color: s.colors.textMuted,
+          width: '10px',
+          display: 'inline-block',
+          transition: 'transform 0.15s ease',
+          transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
+        }}>
+          ▶
+        </span>
+        <span>{node.segment}</span>
+        <span style={{
+          fontSize: '10px',
+          color: s.colors.textMuted,
+          fontWeight: 400,
+          marginLeft: 'auto',
+        }}>
+          {total}
+        </span>
+      </button>
+
+      {/* Children */}
+      {expanded && (
+        <div>
+          {/* Sub-sections for child nodes */}
+          {Array.from(node.children.entries()).map(([name, child]) => {
+            const childCount = countIssues(child);
+            // If this child only has direct issues and no sub-children, render inline
+            if (child.children.size === 0) {
+              return (
+                <LeafSection key={name} node={child} depth={depth + 1} />
+              );
+            }
+            return (
+              <CollectionSection key={name} node={child} depth={depth + 1} />
+            );
+          })}
+
+          {/* Direct issues at this level */}
+          {node.issues.map((issue, i) => (
+            <IssueRow
+              key={`issue-${i}`}
+              issue={issue}
+              indent={(depth + 1) * 12 + 16}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A leaf section — expandable segment that contains only issues (no deeper nesting) */
+function LeafSection({ node, depth }: { node: TreeNode; depth: number }) {
+  const [expanded, setExpanded] = useState(false);
+  const total = node.issues.length;
+
+  return (
+    <div>
+      <button
+        onClick={() => setExpanded(!expanded)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          width: '100%',
+          padding: '4px 8px',
+          background: 'transparent',
+          border: 'none',
+          cursor: 'pointer',
+          fontSize: '11px',
+          fontWeight: 500,
+          color: s.colors.text,
+          textAlign: 'left',
+          marginLeft: depth * 12,
+        }}
+      >
+        <span style={{
+          fontSize: '9px',
+          color: s.colors.textMuted,
+          width: '10px',
+          display: 'inline-block',
+          transition: 'transform 0.15s ease',
+          transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
+        }}>
+          ▶
+        </span>
+        <span>{node.segment}</span>
+        <span style={{
+          fontSize: '10px',
+          color: s.colors.textMuted,
+          fontWeight: 400,
+          marginLeft: 'auto',
+        }}>
+          {total}
+        </span>
+      </button>
+
+      {expanded && node.issues.map((issue, i) => (
+        <IssueRow
+          key={`leaf-${i}`}
+          issue={issue}
+          indent={(depth + 1) * 12 + 16}
+        />
+      ))}
+    </div>
+  );
+}
+
+function IssueRow({ issue, indent }: { issue: DriftIssue; indent: number }) {
+  const fullName = issue.sourceName ?? issue.comparisonName ?? 'Unknown';
+  // Show only the leaf segment of the name
+  const separator = fullName.includes('/') ? '/' : '.';
+  const segments = fullName.split(separator);
+  const leafName = segments[segments.length - 1];
+
   const isMissingInComp = issue.type === 'missing_in_comparison';
 
   return (
@@ -187,22 +375,24 @@ function IssueRow({ issue }: { issue: DriftIssue }) {
       display: 'flex',
       alignItems: 'center',
       gap: '8px',
-      padding: '6px 8px',
+      padding: '4px 8px',
       borderRadius: '4px',
-      marginBottom: '2px',
+      marginBottom: '1px',
+      marginLeft: indent,
+      marginRight: '4px',
       background: isMissingInComp ? s.colors.errorBg : s.colors.warningBg,
       fontSize: '11px',
     }}>
       {/* Token type icon */}
       <span style={{
-        width: '18px',
-        height: '18px',
-        borderRadius: '4px',
+        width: '16px',
+        height: '16px',
+        borderRadius: '3px',
         background: s.colors.bgSecondary,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: '9px',
+        fontSize: '8px',
         fontWeight: 700,
         color: s.colors.textSecondary,
         flexShrink: 0,
@@ -210,17 +400,10 @@ function IssueRow({ issue }: { issue: DriftIssue }) {
         {tokenTypeIcons[issue.tokenType]}
       </span>
 
-      {/* Token name and collection */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {name}
-        </div>
-        {issue.collection && (
-          <div style={{ fontSize: '9px', color: s.colors.textMuted }}>
-            {issue.collection}
-          </div>
-        )}
-      </div>
+      {/* Leaf name */}
+      <span style={{ flex: 1, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {leafName}
+      </span>
 
       {/* Issue type */}
       <span style={{
