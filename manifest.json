@@ -9,5 +9,6 @@
     "allowedDomains": ["https://api.figma.com"],
     "reasoning": "Fetches variables and styles from external Figma files via REST API"
   },
-  "editorType": ["figma"]
+  "editorType": ["figma"],
+  "permissions": ["teamlibrary"]
 }
