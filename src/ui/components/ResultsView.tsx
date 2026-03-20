@@ -21,32 +21,23 @@ function createNode(segment: string): TreeNode {
   return { segment, children: new Map(), issues: [] };
 }
 
-/**
- * Build a tree from issues:
- *   Collection (or style type) → path segment → ... → leaf issue
- */
 function buildTree(issues: DriftIssue[]): TreeNode {
   const root = createNode('root');
 
   for (const issue of issues) {
     const name = issue.sourceName ?? issue.comparisonName ?? 'Unknown';
-
-    // Top-level group: collection for variables, style type label for styles
     const groupName = issue.collection
       ? issue.collection
       : styleTypeGroupLabel(issue.tokenType);
 
-    // Get or create the group node
     if (!root.children.has(groupName)) {
       root.children.set(groupName, createNode(groupName));
     }
     const groupNode = root.children.get(groupName)!;
 
-    // Split name into path segments using / or .
     const separator = name.includes('/') ? '/' : '.';
     const segments = name.split(separator);
 
-    // Walk down the tree, creating intermediate nodes
     let current = groupNode;
     for (let i = 0; i < segments.length - 1; i++) {
       const seg = segments[i];
@@ -56,7 +47,6 @@ function buildTree(issues: DriftIssue[]): TreeNode {
       current = current.children.get(seg)!;
     }
 
-    // Attach the issue at the leaf
     current.issues.push(issue);
   }
 
@@ -73,7 +63,6 @@ function styleTypeGroupLabel(tokenType: TokenType): string {
   }
 }
 
-/** Count all issues under a node (recursively) */
 function countIssues(node: TreeNode): number {
   let count = node.issues.length;
   for (const child of node.children.values()) {
@@ -97,11 +86,18 @@ const tokenTypeIcons: Record<TokenType, string> = {
   GRID_STYLE: 'G',
 };
 
+const tokenTypeColors: Record<TokenType, string> = {
+  VARIABLE: '#6C5CE7',
+  PAINT_STYLE: '#E74C6F',
+  TEXT_STYLE: '#00B894',
+  EFFECT_STYLE: '#E8A317',
+  GRID_STYLE: '#0984E3',
+};
+
 export function ResultsView({ issues, onBack, onRefresh, loading }: ResultsViewProps) {
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState<DriftIssueType | 'all'>('all');
 
-  // Filter
   const filtered = issues.filter(issue => {
     if (filterType !== 'all' && issue.type !== filterType) return false;
     if (search) {
@@ -111,32 +107,27 @@ export function ResultsView({ issues, onBack, onRefresh, loading }: ResultsViewP
     return true;
   });
 
-  // Summary counts
   const missingInSource = issues.filter(i => i.type === 'missing_in_source').length;
   const missingInComparison = issues.filter(i => i.type === 'missing_in_comparison').length;
-
-  // Build tree from filtered issues
   const tree = buildTree(filtered);
 
   return (
-    <div style={{ padding: '16px' }}>
+    <div style={{ padding: '20px', animation: 'fadeIn 0.2s ease' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
         <button
           onClick={onBack}
           style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: '16px',
-            padding: '0',
-            color: s.colors.textSecondary,
+            ...s.buttonGhost,
+            padding: '4px 8px',
+            fontSize: '14px',
+            borderRadius: '6px',
           }}
           title="Back to setup"
         >
           ←
         </button>
-        <h2 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>
+        <h2 style={{ fontSize: '15px', fontWeight: 700, margin: 0, color: s.colors.text, letterSpacing: '-0.01em' }}>
           Results
         </h2>
         <button
@@ -144,14 +135,16 @@ export function ResultsView({ issues, onBack, onRefresh, loading }: ResultsViewP
           disabled={loading}
           style={{
             marginLeft: 'auto',
-            padding: '4px 10px',
+            padding: '5px 12px',
             background: loading ? s.colors.bgSecondary : s.colors.brand,
             color: loading ? s.colors.textMuted : '#fff',
             border: 'none',
-            borderRadius: '4px',
+            borderRadius: '6px',
             cursor: loading ? 'not-allowed' : 'pointer',
             fontSize: '11px',
-            fontWeight: 500,
+            fontWeight: 600,
+            boxShadow: loading ? 'none' : `0 1px 3px rgba(108, 92, 231, 0.3)`,
+            transition: 'all 0.15s ease',
           }}
           title="Re-run comparison"
         >
@@ -159,77 +152,78 @@ export function ResultsView({ issues, onBack, onRefresh, loading }: ResultsViewP
         </button>
       </div>
 
-      {/* Loading overlay */}
+      {/* Loading */}
       {loading && (
         <div style={{
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: '48px 16px',
-          gap: '12px',
+          padding: '56px 16px',
+          gap: '16px',
         }}>
           <div style={{
-            width: '24px',
-            height: '24px',
-            border: `3px solid ${s.colors.border}`,
+            width: '28px',
+            height: '28px',
+            border: `3px solid ${s.colors.borderLight}`,
             borderTopColor: s.colors.brand,
             borderRadius: '50%',
             animation: 'spin 0.8s linear infinite',
           }} />
-          <p style={{ fontSize: '12px', color: s.colors.textMuted }}>
+          <p style={{ fontSize: '12px', color: s.colors.textMuted, fontWeight: 500 }}>
             Comparing tokens...
           </p>
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
       )}
 
       {/* No drift */}
       {!loading && issues.length === 0 && (
         <div style={{
-          padding: '24px 16px',
+          padding: '32px 16px',
           textAlign: 'center',
           background: s.colors.successBg,
-          borderRadius: '8px',
+          border: `1px solid ${s.colors.successBorder}`,
+          borderRadius: '12px',
         }}>
-          <p style={{ fontSize: '14px', fontWeight: 600, color: s.colors.success, margin: 0 }}>
+          <div style={{ fontSize: '24px', marginBottom: '8px' }}>&#10003;</div>
+          <p style={{ fontSize: '13px', fontWeight: 600, color: s.colors.success, margin: 0 }}>
             No drift detected
           </p>
-          <p style={{ fontSize: '11px', color: s.colors.textMuted, marginTop: '4px' }}>
-            All tokens match across the compared files.
+          <p style={{ fontSize: '11px', color: s.colors.textMuted, marginTop: '6px' }}>
+            All tokens match across compared files.
           </p>
         </div>
       )}
 
       {!loading && issues.length > 0 && (
         <>
-          {/* Summary bar */}
+          {/* Summary */}
           <div style={{
             display: 'flex',
-            gap: '8px',
-            marginBottom: '12px',
+            gap: '6px',
+            marginBottom: '14px',
             flexWrap: 'wrap',
           }}>
-            <span style={s.badge(s.colors.bgSecondary, s.colors.text)}>
+            <span style={s.badge(s.colors.bgTertiary, s.colors.text)}>
               {issues.length} total
             </span>
             {missingInComparison > 0 && (
-              <span style={s.badge(s.colors.errorBg, s.colors.error)}>
+              <span style={s.badge(s.colors.errorBg, s.colors.error, s.colors.errorBorder)}>
                 {missingInComparison} missing in comparison
               </span>
             )}
             {missingInSource > 0 && (
-              <span style={s.badge(s.colors.warningBg, '#996B00')}>
+              <span style={s.badge(s.colors.warningBg, s.colors.warning, s.colors.warningBorder)}>
                 {missingInSource} missing in this file
               </span>
             )}
           </div>
 
           {/* Search and filter */}
-          <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
             <input
               style={{ ...s.input, flex: 1 }}
-              placeholder="Search by token name..."
+              placeholder="Search tokens..."
               value={search}
               onInput={(e) => setSearch((e.target as HTMLInputElement).value)}
             />
@@ -246,20 +240,27 @@ export function ResultsView({ issues, onBack, onRefresh, loading }: ResultsViewP
             </select>
           </div>
 
-          {/* Filtered count */}
           {filtered.length !== issues.length && (
-            <p style={{ fontSize: '10px', color: s.colors.textMuted, marginBottom: '8px' }}>
-              Showing {filtered.length} of {issues.length} issues
+            <p style={{ fontSize: '10px', color: s.colors.textMuted, marginBottom: '10px' }}>
+              Showing {filtered.length} of {issues.length}
             </p>
           )}
 
           {/* Tree */}
-          {Array.from(tree.children.entries()).map(([name, node]) => (
-            <CollectionSection key={name} node={node} depth={0} />
-          ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {Array.from(tree.children.entries()).map(([name, node]) => (
+              <CollectionSection key={name} node={node} depth={0} />
+            ))}
+          </div>
 
           {filtered.length === 0 && (
-            <p style={{ fontSize: '11px', color: s.colors.textMuted, fontStyle: 'italic', textAlign: 'center', marginTop: '16px' }}>
+            <p style={{
+              fontSize: '11px',
+              color: s.colors.textMuted,
+              textAlign: 'center',
+              marginTop: '24px',
+              padding: '16px',
+            }}>
               No issues match the current filter.
             </p>
           )}
@@ -269,78 +270,79 @@ export function ResultsView({ issues, onBack, onRefresh, loading }: ResultsViewP
   );
 }
 
-/** Expandable section for a tree node (collection or path segment) */
 function CollectionSection({ node, depth }: { node: TreeNode; depth: number }) {
   const [expanded, setExpanded] = useState(depth < 1);
   const total = countIssues(node);
   const isTopLevel = depth === 0;
 
   return (
-    <div style={{ marginBottom: isTopLevel ? '8px' : '0' }}>
-      {/* Section header */}
+    <div style={{
+      marginBottom: isTopLevel ? '2px' : '0',
+      ...(isTopLevel ? {
+        background: s.colors.bgSecondary,
+        borderRadius: '10px',
+        border: `1px solid ${s.colors.borderLight}`,
+        overflow: 'hidden',
+      } : {}),
+    }}>
       <button
         onClick={() => setExpanded(!expanded)}
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '6px',
+          gap: '8px',
           width: '100%',
-          padding: isTopLevel ? '8px 8px' : '4px 8px',
-          background: isTopLevel ? s.colors.bgSecondary : 'transparent',
+          padding: isTopLevel ? '10px 12px' : '5px 10px',
+          background: 'transparent',
           border: 'none',
-          borderRadius: isTopLevel ? '6px' : '0',
           cursor: 'pointer',
           fontSize: isTopLevel ? '12px' : '11px',
           fontWeight: isTopLevel ? 600 : 500,
           color: s.colors.text,
           textAlign: 'left',
-          marginLeft: isTopLevel ? 0 : depth * 12,
+          marginLeft: isTopLevel ? 0 : depth * 14,
+          transition: 'background 0.1s ease',
         }}
       >
         <span style={{
-          fontSize: '9px',
+          fontSize: '8px',
           color: s.colors.textMuted,
-          width: '10px',
-          display: 'inline-block',
+          width: '12px',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           transition: 'transform 0.15s ease',
           transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
         }}>
           ▶
         </span>
-        <span>{node.segment}</span>
+        <span style={{ flex: 1 }}>{node.segment}</span>
         <span style={{
           fontSize: '10px',
           color: s.colors.textMuted,
-          fontWeight: 400,
-          marginLeft: 'auto',
+          fontWeight: 500,
+          background: isTopLevel ? s.colors.bgTertiary : 'transparent',
+          padding: isTopLevel ? '1px 7px' : '0',
+          borderRadius: '10px',
         }}>
           {total}
         </span>
       </button>
 
-      {/* Children */}
       {expanded && (
-        <div>
-          {/* Sub-sections for child nodes */}
+        <div style={{ paddingBottom: isTopLevel ? '4px' : '0' }}>
           {Array.from(node.children.entries()).map(([name, child]) => {
-            const childCount = countIssues(child);
-            // If this child only has direct issues and no sub-children, render inline
             if (child.children.size === 0) {
-              return (
-                <LeafSection key={name} node={child} depth={depth + 1} />
-              );
+              return <LeafSection key={name} node={child} depth={depth + 1} />;
             }
-            return (
-              <CollectionSection key={name} node={child} depth={depth + 1} />
-            );
+            return <CollectionSection key={name} node={child} depth={depth + 1} />;
           })}
 
-          {/* Direct issues at this level */}
           {node.issues.map((issue, i) => (
             <IssueRow
               key={`issue-${i}`}
               issue={issue}
-              indent={(depth + 1) * 12 + 16}
+              indent={(depth + 1) * 14 + 20}
             />
           ))}
         </div>
@@ -349,7 +351,6 @@ function CollectionSection({ node, depth }: { node: TreeNode; depth: number }) {
   );
 }
 
-/** A leaf section — expandable segment that contains only issues (no deeper nesting) */
 function LeafSection({ node, depth }: { node: TreeNode; depth: number }) {
   const [expanded, setExpanded] = useState(false);
   const total = node.issues.length;
@@ -361,9 +362,9 @@ function LeafSection({ node, depth }: { node: TreeNode; depth: number }) {
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '6px',
+          gap: '8px',
           width: '100%',
-          padding: '4px 8px',
+          padding: '5px 10px',
           background: 'transparent',
           border: 'none',
           cursor: 'pointer',
@@ -371,26 +372,24 @@ function LeafSection({ node, depth }: { node: TreeNode; depth: number }) {
           fontWeight: 500,
           color: s.colors.text,
           textAlign: 'left',
-          marginLeft: depth * 12,
+          marginLeft: depth * 14,
+          transition: 'background 0.1s ease',
         }}
       >
         <span style={{
-          fontSize: '9px',
+          fontSize: '8px',
           color: s.colors.textMuted,
-          width: '10px',
-          display: 'inline-block',
+          width: '12px',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           transition: 'transform 0.15s ease',
           transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
         }}>
           ▶
         </span>
-        <span>{node.segment}</span>
-        <span style={{
-          fontSize: '10px',
-          color: s.colors.textMuted,
-          fontWeight: 400,
-          marginLeft: 'auto',
-        }}>
+        <span style={{ flex: 1 }}>{node.segment}</span>
+        <span style={{ fontSize: '10px', color: s.colors.textMuted, fontWeight: 500 }}>
           {total}
         </span>
       </button>
@@ -399,7 +398,7 @@ function LeafSection({ node, depth }: { node: TreeNode; depth: number }) {
         <IssueRow
           key={`leaf-${i}`}
           issue={issue}
-          indent={(depth + 1) * 12 + 16}
+          indent={(depth + 1) * 14 + 20}
         />
       ))}
     </div>
@@ -408,54 +407,70 @@ function LeafSection({ node, depth }: { node: TreeNode; depth: number }) {
 
 function IssueRow({ issue, indent }: { issue: DriftIssue; indent: number }) {
   const fullName = issue.sourceName ?? issue.comparisonName ?? 'Unknown';
-  // Show only the leaf segment of the name
   const separator = fullName.includes('/') ? '/' : '.';
   const segments = fullName.split(separator);
   const leafName = segments[segments.length - 1];
 
   const isMissingInComp = issue.type === 'missing_in_comparison';
+  const accentColor = isMissingInComp ? s.colors.error : s.colors.warning;
+  const bgColor = isMissingInComp ? s.colors.errorBg : s.colors.warningBg;
+  const borderColor = isMissingInComp ? s.colors.errorBorder : s.colors.warningBorder;
 
   return (
     <div style={{
       display: 'flex',
       alignItems: 'center',
       gap: '8px',
-      padding: '4px 8px',
-      borderRadius: '4px',
-      marginBottom: '1px',
+      padding: '5px 10px',
+      borderRadius: '6px',
+      marginBottom: '2px',
       marginLeft: indent,
-      marginRight: '4px',
-      background: isMissingInComp ? s.colors.errorBg : s.colors.warningBg,
+      marginRight: '8px',
+      background: bgColor,
+      border: `1px solid ${borderColor}`,
       fontSize: '11px',
+      transition: 'all 0.1s ease',
     }}>
       {/* Token type icon */}
       <span style={{
-        width: '16px',
-        height: '16px',
-        borderRadius: '3px',
-        background: s.colors.bgSecondary,
+        width: '18px',
+        height: '18px',
+        borderRadius: '5px',
+        background: tokenTypeColors[issue.tokenType] + '14',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         fontSize: '8px',
         fontWeight: 700,
-        color: s.colors.textSecondary,
+        color: tokenTypeColors[issue.tokenType],
         flexShrink: 0,
+        border: `1px solid ${tokenTypeColors[issue.tokenType]}20`,
       }}>
         {tokenTypeIcons[issue.tokenType]}
       </span>
 
       {/* Leaf name */}
-      <span style={{ flex: 1, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <span style={{
+        flex: 1,
+        fontWeight: 500,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        color: s.colors.text,
+      }}>
         {leafName}
       </span>
 
-      {/* Issue type */}
+      {/* Issue type pill */}
       <span style={{
         fontSize: '9px',
-        color: isMissingInComp ? s.colors.error : '#996B00',
+        fontWeight: 600,
+        color: accentColor,
         whiteSpace: 'nowrap',
         flexShrink: 0,
+        padding: '1px 6px',
+        borderRadius: '4px',
+        background: 'rgba(255,255,255,0.6)',
       }}>
         {issueTypeLabels[issue.type]}
       </span>

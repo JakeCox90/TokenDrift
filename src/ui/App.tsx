@@ -116,8 +116,22 @@ export function App() {
 
   if (patLoading) {
     return (
-      <div style={{ padding: '16px', textAlign: 'center', color: s.colors.textMuted }}>
-        Loading...
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '64px 16px',
+        gap: '16px',
+      }}>
+        <div style={{
+          width: '28px',
+          height: '28px',
+          border: `3px solid ${s.colors.borderLight}`,
+          borderTopColor: s.colors.brand,
+          borderRadius: '50%',
+          animation: 'spin 0.8s linear infinite',
+        }} />
       </div>
     );
   }
@@ -126,13 +140,18 @@ export function App() {
     <>
       {error && (
         <div style={{
-          padding: '8px 16px',
+          padding: '10px 20px',
           background: s.colors.errorBg,
           color: s.colors.error,
           fontSize: '11px',
-          borderBottom: `1px solid ${s.colors.error}`,
+          fontWeight: 500,
+          borderBottom: `1px solid ${s.colors.errorBorder}`,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
         }}>
-          {error}
+          <span style={{ flexShrink: 0 }}>!</span>
+          <span>{error}</span>
         </div>
       )}
 
