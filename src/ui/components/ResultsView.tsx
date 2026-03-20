@@ -159,8 +159,33 @@ export function ResultsView({ issues, onBack, onRefresh, loading }: ResultsViewP
         </button>
       </div>
 
+      {/* Loading overlay */}
+      {loading && (
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '48px 16px',
+          gap: '12px',
+        }}>
+          <div style={{
+            width: '24px',
+            height: '24px',
+            border: `3px solid ${s.colors.border}`,
+            borderTopColor: s.colors.brand,
+            borderRadius: '50%',
+            animation: 'spin 0.8s linear infinite',
+          }} />
+          <p style={{ fontSize: '12px', color: s.colors.textMuted }}>
+            Comparing tokens...
+          </p>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      )}
+
       {/* No drift */}
-      {issues.length === 0 && (
+      {!loading && issues.length === 0 && (
         <div style={{
           padding: '24px 16px',
           textAlign: 'center',
@@ -176,7 +201,7 @@ export function ResultsView({ issues, onBack, onRefresh, loading }: ResultsViewP
         </div>
       )}
 
-      {issues.length > 0 && (
+      {!loading && issues.length > 0 && (
         <>
           {/* Summary bar */}
           <div style={{
