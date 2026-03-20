@@ -11,6 +11,7 @@ interface SetupViewProps {
   onConfigChange: (config: ComparisonConfig) => void;
   onPatChange: (pat: string) => void;
   onRunComparison: () => void;
+  onRefreshLibraries: () => void;
   loading: boolean;
   libraries: LinkedLibrary[];
   recentFiles: FileReference[];
@@ -22,6 +23,7 @@ export function SetupView({
   onConfigChange,
   onPatChange,
   onRunComparison,
+  onRefreshLibraries,
   loading,
   libraries,
   recentFiles,
@@ -309,6 +311,18 @@ export function SetupView({
                 <p style={{ fontSize: '10px', color: s.colors.textMuted, marginTop: '4px' }}>
                   Enable libraries in your Figma file first
                 </p>
+                <button
+                  onClick={onRefreshLibraries}
+                  style={{
+                    ...s.buttonGhost,
+                    marginTop: '10px',
+                    fontSize: '11px',
+                    color: s.colors.brand,
+                    fontWeight: 600,
+                  }}
+                >
+                  Refresh
+                </button>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -548,11 +562,14 @@ export function SetupView({
             })
           }
         >
-          <option value="ignore_first_segment">Ignore first path segment (recommended)</option>
+          <option value="ignore_first_segment">Ignore top-level group (recommended)</option>
           <option value="full_name">Exact full name</option>
         </select>
         <p style={{ fontSize: '10px', color: s.colors.textMuted, marginTop: '6px', lineHeight: 1.4 }}>
-          Strips the theme prefix so colour/primary matches thesun/primary.
+          {config.matchStrategy === 'full_name'
+            ? 'Tokens must have identical names to match. Brand/primary/resting will not match TheSun/primary/resting.'
+            : 'Ignores the top-level variable group when matching. e.g. Brand/primary/resting and TheSun/primary/resting both match on primary/resting.'
+          }
         </p>
       </div>
 

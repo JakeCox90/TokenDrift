@@ -75,6 +75,10 @@ export function App() {
     return () => window.removeEventListener('message', handler);
   }, []);
 
+  const refreshLibraries = useCallback(() => {
+    postToSandbox({ type: 'get-linked-libraries' });
+  }, []);
+
   const handleConfigChange = useCallback((newConfig: ComparisonConfig) => {
     setConfig(newConfig);
     setStoredConfig(JSON.stringify(newConfig));
@@ -207,6 +211,7 @@ export function App() {
           onConfigChange={handleConfigChange}
           onPatChange={handlePatChange}
           onRunComparison={handleRunComparison}
+          onRefreshLibraries={refreshLibraries}
           loading={loading}
           libraries={libraries}
           recentFiles={recentFiles}
