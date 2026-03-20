@@ -3,32 +3,35 @@ import type { JSX } from 'preact';
 type CSSProperties = JSX.CSSProperties;
 
 export const colors = {
-  // Brand
-  brand: '#6C5CE7',
-  brandHover: '#5A4BD1',
-  brandSubtle: 'rgba(108, 92, 231, 0.08)',
-  brandLight: 'rgba(108, 92, 231, 0.12)',
+  // Brand — uses Figma's built-in theme variables
+  brand: 'var(--figma-color-bg-brand)',
+  brandHover: 'var(--figma-color-bg-brand-hover)',
+  brandSubtle: 'var(--figma-color-bg-brand-tertiary)',
+  brandLight: 'var(--figma-color-bg-brand-tertiary)',
 
-  // Neutrals
-  text: '#1A1A2E',
-  textSecondary: '#5C5C7A',
-  textMuted: '#9C9CB5',
-  bg: '#FFFFFF',
-  bgSecondary: '#F8F8FC',
-  bgTertiary: '#F0F0F7',
-  border: '#E8E8F0',
-  borderLight: '#F0F0F7',
+  // Neutrals — follows Figma's native theming (auto light/dark)
+  text: 'var(--figma-color-text)',
+  textSecondary: 'var(--figma-color-text-secondary)',
+  textMuted: 'var(--figma-color-text-tertiary)',
+  bg: 'var(--figma-color-bg)',
+  bgSecondary: 'var(--figma-color-bg-secondary)',
+  bgTertiary: 'var(--figma-color-bg-tertiary)',
+  border: 'var(--figma-color-border)',
+  borderLight: 'var(--figma-color-border)',
 
   // Semantic
-  error: '#E74C6F',
-  errorBg: 'rgba(231, 76, 111, 0.08)',
-  errorBorder: 'rgba(231, 76, 111, 0.2)',
-  success: '#00B894',
-  successBg: 'rgba(0, 184, 148, 0.08)',
-  successBorder: 'rgba(0, 184, 148, 0.2)',
-  warning: '#E8A317',
-  warningBg: 'rgba(232, 163, 23, 0.08)',
-  warningBorder: 'rgba(232, 163, 23, 0.2)',
+  error: 'var(--figma-color-text-danger)',
+  errorBg: 'var(--figma-color-bg-danger-tertiary)',
+  errorBorder: 'var(--figma-color-border-danger)',
+  success: 'var(--figma-color-text-success)',
+  successBg: 'var(--figma-color-bg-success-tertiary)',
+  successBorder: 'var(--figma-color-border-success)',
+  warning: 'var(--figma-color-text-warning)',
+  warningBg: 'var(--figma-color-bg-warning-tertiary)',
+  warningBorder: 'var(--figma-color-border-warning)',
+
+  // Text on brand backgrounds
+  textOnBrand: 'var(--figma-color-text-onbrand)',
 } as const;
 
 export const shadows = {
@@ -41,7 +44,7 @@ export const shadows = {
 export const button: CSSProperties = {
   padding: '9px 16px',
   background: colors.brand,
-  color: '#fff',
+  color: colors.textOnBrand,
   border: 'none',
   borderRadius: '8px',
   cursor: 'pointer',
@@ -49,7 +52,7 @@ export const button: CSSProperties = {
   fontWeight: 600,
   width: '100%',
   letterSpacing: '0.01em',
-  boxShadow: `0 1px 3px rgba(108, 92, 231, 0.3)`,
+  boxShadow: 'var(--figma-shadow-floating, 0 1px 3px rgba(0,0,0,0.12))',
   transition: 'all 0.15s ease',
 };
 
