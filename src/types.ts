@@ -59,7 +59,15 @@ export interface FileReference {
   fileKey: string;
   /** Human-readable label (file name or user-provided) */
   label: string;
+  /** Thumbnail URL from Figma API */
+  thumbnailUrl?: string;
 }
+
+/** How tokens are matched across files */
+export type MatchStrategy =
+  | 'full_name'
+  | 'ignore_first_segment'
+  | 'ignore_first_two_segments';
 
 /** Full comparison configuration persisted in clientStorage */
 export interface ComparisonConfig {
@@ -69,6 +77,18 @@ export interface ComparisonConfig {
   sourceFileKey?: string;
   /** Files to compare against the source */
   comparisonFiles: FileReference[];
+  /** How to match token names across files (default: ignore_first_segment) */
+  matchStrategy?: MatchStrategy;
+}
+
+// ─── Libraries ──────────────────────────────────────────────────────────────
+
+/** A linked library visible to the current file */
+export interface LinkedLibrary {
+  /** Library display name */
+  name: string;
+  /** Variable collection keys belonging to this library */
+  collectionKeys: string[];
 }
 
 // ─── Sandbox ↔ UI Messages ──────────────────────────────────────────────────
@@ -76,12 +96,14 @@ export interface ComparisonConfig {
 /** Messages sent from UI to sandbox */
 export type UIToSandboxMessage =
   | { type: 'get-local-tokens' }
+  | { type: 'get-linked-libraries' }
   | { type: 'get-storage'; key: string }
   | { type: 'set-storage'; key: string; value: string };
 
 /** Messages sent from sandbox to UI */
 export type SandboxToUIMessage =
   | { type: 'local-tokens'; tokens: NormalisedToken[] }
+  | { type: 'linked-libraries'; libraries: LinkedLibrary[]; error?: string }
   | { type: 'storage-result'; key: string; value: string | null }
   | { type: 'storage-set'; key: string; success: boolean }
   | { type: 'error'; message: string };

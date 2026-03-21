@@ -1,5 +1,5 @@
 /// <reference types="@figma/plugin-typings" />
-import type { UIToSandboxMessage, SandboxToUIMessage, NormalisedToken } from './types';
+import type { UIToSandboxMessage, SandboxToUIMessage, NormalisedToken, LinkedLibrary } from './types';
 
 figma.showUI(__html__, { width: 480, height: 600 });
 
@@ -11,6 +11,16 @@ figma.ui.onmessage = async (msg: UIToSandboxMessage) => {
         sendToUI({ type: 'local-tokens', tokens });
       } catch (err) {
         sendToUI({ type: 'error', message: String(err) });
+      }
+      break;
+    }
+    case 'get-linked-libraries': {
+      try {
+        const libraries = await getLinkedLibraries();
+        sendToUI({ type: 'linked-libraries', libraries });
+      } catch (err) {
+        // Always respond with linked-libraries so the UI doesn't hang
+        sendToUI({ type: 'linked-libraries', libraries: [], error: String(err) });
       }
       break;
     }
@@ -43,7 +53,16 @@ async function getLocalTokens(): Promise<NormalisedToken[]> {
   const collections = await figma.variables.getLocalVariableCollectionsAsync();
   const collectionMap = new Map(collections.map(c => [c.id, c.name]));
 
+  // Collect mode names so we can filter them out — these aren't real tokens
+  const modeNames = new Set<string>();
+  for (const c of collections) {
+    for (const mode of c.modes) {
+      modeNames.add(mode.name);
+    }
+  }
+
   for (const v of variables) {
+    if (modeNames.has(v.name)) continue;
     tokens.push({
       name: v.name,
       type: 'VARIABLE',
@@ -78,4 +97,30 @@ async function getLocalTokens(): Promise<NormalisedToken[]> {
   }
 
   return tokens;
+}
+
+async function getLinkedLibraries(): Promise<LinkedLibrary[]> {
+  const libraryMap = new Map<string, string[]>();
+
+  // Variable collections
+  if (figma.teamLibrary && typeof figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync === 'function') {
+    try {
+      const collections = await figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync();
+      for (const c of collections) {
+        if (!libraryMap.has(c.libraryName)) {
+          libraryMap.set(c.libraryName, []);
+        }
+        libraryMap.get(c.libraryName)!.push(c.key);
+      }
+    } catch (_) {
+      // API not available in this context
+    }
+  }
+
+  const libraries: LinkedLibrary[] = [];
+  for (const _ref of libraryMap) {
+    libraries.push({ name: _ref[0], collectionKeys: _ref[1] });
+  }
+
+  return libraries;
 }
