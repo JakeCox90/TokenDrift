@@ -119,31 +119,85 @@ describe('fetchFileVariables', () => {
 });
 
 describe('fetchFileStyles', () => {
-  it('normalises styles from API response', async () => {
+  it('uses styles from file endpoint when available', async () => {
     const apiResponse = {
-      meta: {
-        styles: [
-          { name: 'Brand/Primary', style_type: 'FILL' },
-          { name: 'Heading/H1', style_type: 'TEXT' },
-          { name: 'Shadow/MD', style_type: 'EFFECT' },
-          { name: 'Grid/12col', style_type: 'GRID' },
-        ],
+      name: 'Test File',
+      styles: {
+        '1:1': { name: 'Brand/Primary', styleType: 'FILL' },
+        '1:2': { name: 'Heading/H1', styleType: 'TEXT' },
+        '1:3': { name: 'Shadow/MD', styleType: 'EFFECT' },
+        '1:4': { name: 'Grid/12col', styleType: 'GRID' },
       },
     };
 
     globalThis.fetch = mockFetch(apiResponse);
     const tokens = await fetchFileStyles(FILE_KEY, TOKEN);
 
+    expect(tokens).toHaveLength(4);
+    expect(tokens).toEqual(
+      expect.arrayContaining([
+        { name: 'Brand/Primary', type: 'PAINT_STYLE', sourceFile: FILE_KEY },
+        { name: 'Heading/H1', type: 'TEXT_STYLE', sourceFile: FILE_KEY },
+        { name: 'Shadow/MD', type: 'EFFECT_STYLE', sourceFile: FILE_KEY },
+        { name: 'Grid/12col', type: 'GRID_STYLE', sourceFile: FILE_KEY },
+      ]),
+    );
+  });
+
+  it('falls back to published styles endpoint when file styles map is empty', async () => {
+    let callCount = 0;
+    globalThis.fetch = vi.fn().mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        // First call: /files/{key}?depth=1 — no styles
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ name: 'Test File' }),
+        });
+      }
+      // Second call: /files/{key}/styles — published styles
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({
+          meta: {
+            styles: [
+              { name: 'Brand/Primary', style_type: 'FILL' },
+              { name: 'Heading/H1', style_type: 'TEXT' },
+            ],
+          },
+        }),
+      });
+    });
+
+    const tokens = await fetchFileStyles(FILE_KEY, TOKEN);
+
+    expect(tokens).toHaveLength(2);
     expect(tokens).toEqual([
       { name: 'Brand/Primary', type: 'PAINT_STYLE', sourceFile: FILE_KEY },
       { name: 'Heading/H1', type: 'TEXT_STYLE', sourceFile: FILE_KEY },
-      { name: 'Shadow/MD', type: 'EFFECT_STYLE', sourceFile: FILE_KEY },
-      { name: 'Grid/12col', type: 'GRID_STYLE', sourceFile: FILE_KEY },
     ]);
   });
 
-  it('returns empty array for file with no styles', async () => {
-    globalThis.fetch = mockFetch({ meta: { styles: [] } });
+  it('returns empty array for file with no styles at all', async () => {
+    let callCount = 0;
+    globalThis.fetch = vi.fn().mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ name: 'Empty File' }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ meta: { styles: [] } }),
+      });
+    });
+
     const tokens = await fetchFileStyles(FILE_KEY, TOKEN);
     expect(tokens).toEqual([]);
   });
@@ -151,9 +205,7 @@ describe('fetchFileStyles', () => {
 
 describe('fetchFileTokens', () => {
   it('combines variables and styles', async () => {
-    let callCount = 0;
     globalThis.fetch = vi.fn().mockImplementation((url: string) => {
-      callCount++;
       if (url.includes('variables')) {
         return Promise.resolve({
           ok: true,
@@ -166,12 +218,24 @@ describe('fetchFileTokens', () => {
           }),
         });
       }
+      if (url.includes('depth=1')) {
+        // /files/{key}?depth=1 — styles from file endpoint
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({
+            name: 'Test File',
+            styles: {
+              '1:1': { name: 'Fill/Primary', styleType: 'FILL' },
+            },
+          }),
+        });
+      }
+      // fallback styles endpoint (shouldn't be reached here)
       return Promise.resolve({
         ok: true,
         status: 200,
-        json: () => Promise.resolve({
-          meta: { styles: [{ name: 'Fill/Primary', style_type: 'FILL' }] },
-        }),
+        json: () => Promise.resolve({ meta: { styles: [] } }),
       });
     });
 

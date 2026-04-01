@@ -52,8 +52,8 @@ function buildHtml() {
       -moz-osx-font-smoothing: grayscale;
     }
     input:focus, select:focus {
-      border-color: #6C5CE7 !important;
-      box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.12), inset 0 1px 2px rgba(0,0,0,0.06) !important;
+      border-color: #7695EF !important;
+      box-shadow: 0 0 0 3px rgba(118, 149, 239, 0.12), inset 0 1px 2px rgba(0,0,0,0.06) !important;
     }
     input::placeholder { color: #9C9CB5; }
     button:hover:not(:disabled) { filter: brightness(0.95); }

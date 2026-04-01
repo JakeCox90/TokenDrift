@@ -69,18 +69,40 @@ export async function fetchFileVariables(
   return tokens;
 }
 
-/** Fetch and normalise styles from an external Figma file */
+/**
+ * Fetch and normalise styles from an external Figma file.
+ *
+ * First tries the `styles` map from the main file endpoint, which returns
+ * current names. If that's empty (depth-limited responses may omit styles),
+ * falls back to the dedicated `/styles` endpoint which returns published names.
+ */
 export async function fetchFileStyles(
   fileKey: string,
   token: string,
 ): Promise<NormalisedToken[]> {
-  const data = await figmaFetch<FigmaStylesResponse>(
+  // Try the file endpoint first — returns current (not just published) names
+  const fileData = await figmaFetch<FigmaFileResponse>(
+    `/files/${fileKey}?depth=1`,
+    token,
+    fileKey,
+  );
+
+  if (fileData.styles && Object.keys(fileData.styles).length > 0) {
+    return Object.values(fileData.styles).map(style => ({
+      name: style.name,
+      type: mapStyleType(style.styleType),
+      sourceFile: fileKey,
+    }));
+  }
+
+  // Fallback: dedicated styles endpoint (returns published names)
+  const stylesData = await figmaFetch<FigmaPublishedStylesResponse>(
     `/files/${fileKey}/styles`,
     token,
     fileKey,
   );
 
-  return data.meta.styles.map(style => ({
+  return stylesData.meta.styles.map(style => ({
     name: style.name,
     type: mapStyleType(style.style_type),
     sourceFile: fileKey,
@@ -92,12 +114,60 @@ export async function fetchFileInfo(
   fileKey: string,
   token: string,
 ): Promise<{ name: string; thumbnailUrl?: string }> {
-  const data = await figmaFetch<{ name: string; thumbnailUrl?: string }>(
+  const data = await figmaFetch<FigmaFileResponse>(
     `/files/${fileKey}?depth=1`,
     token,
     fileKey,
   );
   return { name: data.name, thumbnailUrl: data.thumbnailUrl };
+}
+
+/**
+ * Fetch ALL variables from a library file via REST API (always fresh, no caching).
+ * Uses /variables/local to get every variable including those hidden from publishing,
+ * matching what the Plugin API's getVariablesInLibraryCollectionAsync returns.
+ */
+export async function fetchLibraryVariables(
+  fileKey: string,
+  token: string,
+): Promise<NormalisedToken[]> {
+  const data = await figmaFetch<FigmaVariablesResponse>(
+    `/files/${fileKey}/variables/local`,
+    token,
+    fileKey,
+  );
+
+  const collections = data.meta.variableCollections;
+  const variables = data.meta.variables;
+  const tokens: NormalisedToken[] = [];
+
+  // Filter out mode names (e.g. "Light", "Dark") — not real tokens
+  const modeNames = new Set<string>();
+  for (const collection of Object.values(collections)) {
+    if (collection.modes) {
+      for (const mode of collection.modes) {
+        modeNames.add(mode.name);
+      }
+    }
+  }
+
+  for (const variable of Object.values(variables)) {
+    if (variable.deletedButReferenced) continue;
+    if (variable.remote) continue;
+    if (modeNames.has(variable.name)) continue;
+    const collection = collections[variable.variableCollectionId];
+    if (collection?.remote) continue;
+
+    tokens.push({
+      name: variable.name,
+      type: 'VARIABLE',
+      collection: collection?.name,
+      resolvedType: variable.resolvedType as VariableResolvedType,
+      sourceFile: fileKey,
+    });
+  }
+
+  return tokens;
 }
 
 /** Fetch both variables and styles, returning a combined token list */
@@ -117,8 +187,11 @@ async function figmaFetch<T>(
   token: string,
   fileKey: string,
 ): Promise<T> {
-  const response = await fetch(`${FIGMA_API_BASE}${path}`, {
+  const separator = path.includes('?') ? '&' : '?';
+  const url = `${FIGMA_API_BASE}${path}${separator}_t=${Date.now()}`;
+  const response = await fetch(url, {
     headers: { 'X-Figma-Token': token },
+    cache: 'no-store',
   });
 
   if (!response.ok) {
@@ -192,7 +265,23 @@ interface FigmaVariablesResponse {
   };
 }
 
-interface FigmaStylesResponse {
+
+/** Response from GET /v1/files/:key */
+interface FigmaFileResponse {
+  name: string;
+  thumbnailUrl?: string;
+  styles?: Record<
+    string,
+    {
+      name: string;
+      styleType: string;
+      description?: string;
+    }
+  >;
+}
+
+/** Response from GET /v1/files/:key/styles (published styles) */
+interface FigmaPublishedStylesResponse {
   meta: {
     styles: Array<{
       name: string;
@@ -200,3 +289,4 @@ interface FigmaStylesResponse {
     }>;
   };
 }
+

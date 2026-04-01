@@ -39,7 +39,8 @@ export function compareTokens(
 
 /**
  * Diff two sets of tokens using the given match strategy.
- * When isVariable=true, the collection is included in the match key (for full_name strategy).
+ * After finding unmatched tokens, attempts to pair near-matches
+ * and explain what's different.
  */
 function diffTokens(
   source: NormalisedToken[],
@@ -63,36 +64,179 @@ function diffTokens(
     comparisonKeys.set(makeKey(t), t);
   }
 
-  // Missing in comparison
+  // Collect unmatched tokens from each side
+  const unmatchedSource: NormalisedToken[] = [];
+  const unmatchedComparison: NormalisedToken[] = [];
+
   for (const [key, token] of sourceKeys) {
     if (!comparisonKeys.has(key)) {
+      unmatchedSource.push(token);
+    }
+  }
+
+  for (const [key, token] of comparisonKeys) {
+    if (!sourceKeys.has(key)) {
+      unmatchedComparison.push(token);
+    }
+  }
+
+  // Try to pair near-matches before reporting as simply missing
+  const pairedSource = new Set<number>();
+  const pairedComparison = new Set<number>();
+
+  for (let si = 0; si < unmatchedSource.length; si++) {
+    if (pairedSource.has(si)) continue;
+    const src = unmatchedSource[si];
+    const srcKey = makeKey(src);
+
+    let bestMatch: { ci: number; hint: string } | null = null;
+
+    for (let ci = 0; ci < unmatchedComparison.length; ci++) {
+      if (pairedComparison.has(ci)) continue;
+      const comp = unmatchedComparison[ci];
+      const compKey = makeKey(comp);
+
+      const hint = detectNamingIssue(srcKey, compKey);
+      if (hint) {
+        bestMatch = { ci, hint };
+        break; // take first match
+      }
+    }
+
+    if (bestMatch) {
+      pairedSource.add(si);
+      pairedComparison.add(bestMatch.ci);
+      const comp = unmatchedComparison[bestMatch.ci];
       issues.push({
-        type: 'missing_in_comparison',
-        tokenType: token.type,
-        sourceName: token.name,
+        type: 'naming_mismatch',
+        tokenType: src.type,
+        sourceName: src.name,
+        comparisonName: comp.name,
         sourceFile,
         comparisonFile,
-        collection: token.collection,
+        collection: src.collection ?? comp.collection,
+        hint: bestMatch.hint,
       });
     }
   }
 
-  // Missing in source
-  for (const [key, token] of comparisonKeys) {
-    if (!sourceKeys.has(key)) {
-      issues.push({
-        type: 'missing_in_source',
-        tokenType: token.type,
-        comparisonName: token.name,
-        sourceFile,
-        comparisonFile,
-        collection: token.collection,
-      });
-    }
+  // Remaining unmatched → missing issues
+  for (let si = 0; si < unmatchedSource.length; si++) {
+    if (pairedSource.has(si)) continue;
+    const token = unmatchedSource[si];
+    issues.push({
+      type: 'missing_in_comparison',
+      tokenType: token.type,
+      sourceName: token.name,
+      sourceFile,
+      comparisonFile,
+      collection: token.collection,
+    });
+  }
+
+  for (let ci = 0; ci < unmatchedComparison.length; ci++) {
+    if (pairedComparison.has(ci)) continue;
+    const token = unmatchedComparison[ci];
+    issues.push({
+      type: 'missing_in_source',
+      tokenType: token.type,
+      comparisonName: token.name,
+      sourceFile,
+      comparisonFile,
+      collection: token.collection,
+    });
   }
 
   return issues;
 }
+
+// ─── Near-Match Detection Rules ──────────────────────────────────────────────
+
+/**
+ * Naming issue detection rules. Each rule normalises both names in a specific
+ * way. If the normalised forms match but the originals don't, we've found the
+ * issue. Rules are checked in order; the first match wins.
+ */
+const NAMING_RULES: { normalise: (s: string) => string; hint: string }[] = [
+  {
+    // "Border Width 00" vs "Border Width 0"
+    hint: 'These look like the same token but the numbers are written differently',
+    normalise: (s) => s.replace(/\b0*(\d+)\b/g, '$1'),
+  },
+  {
+    // "border/width" vs "Border/Width"
+    hint: 'Same name but different capitalisation',
+    normalise: (s) => s.toLowerCase(),
+  },
+  {
+    // "Border/Width" vs "Border.Width" vs "Border-Width"
+    hint: 'Same name but using different separators (/ . - _)',
+    normalise: (s) => s.replace(/[/.\-_]/g, '/'),
+  },
+  {
+    // "BorderWidth" vs "Border Width" vs "border-width"
+    hint: 'Same token but written in a different format',
+    normalise: (s) => s.replace(/[/.\-_\s]/g, '').toLowerCase(),
+  },
+  {
+    // "colour" vs "color", "grey" vs "gray"
+    hint: 'Same token but using a different spelling (e.g. colour vs color)',
+    normalise: (s) => s
+      .replace(/colour/gi, 'color')
+      .replace(/grey/gi, 'gray')
+      .toLowerCase(),
+  },
+  {
+    // "Border Width" vs "Border  Width"
+    hint: 'Same name but with extra whitespace',
+    normalise: (s) => s.replace(/\s+/g, ' ').trim(),
+  },
+];
+
+/**
+ * Detect if two unmatched keys are actually near-matches with a naming issue.
+ * Returns a human-readable hint string, or null if they're genuinely different tokens.
+ */
+function detectNamingIssue(a: string, b: string): string | null {
+  if (a === b) return null; // already identical, shouldn't happen
+
+  for (const rule of NAMING_RULES) {
+    if (rule.normalise(a) === rule.normalise(b)) {
+      return rule.hint;
+    }
+  }
+
+  // Check if tokens share the same trailing path segments (relocated to a different group)
+  // e.g. "Yellow/100" vs "Unused/Yellow/100", or "core/Yellow/100" vs "archive/old/Yellow/100"
+  const sep = a.includes('/') ? '/' : '.';
+  const aParts = a.split(sep);
+  const bParts = b.split(sep);
+
+  // Compare from the end — find how many trailing segments match
+  let matching = 0;
+  for (let i = 1; i <= Math.min(aParts.length, bParts.length); i++) {
+    if (aParts[aParts.length - i] === bParts[bParts.length - i]) {
+      matching++;
+    } else {
+      break;
+    }
+  }
+
+  // Need at least 2 matching trailing segments to avoid false positives on generic names like "10"
+  if (matching >= 2 && (aParts.length > matching || bParts.length > matching)) {
+    const aPrefix = aParts.slice(0, aParts.length - matching).join(sep);
+    const bPrefix = bParts.slice(0, bParts.length - matching).join(sep);
+    if (aPrefix !== bPrefix) {
+      const from = aPrefix || '(root)';
+      const to = bPrefix || '(root)';
+      return `Same token but in different groups: ${from} → ${to}`;
+    }
+  }
+
+  return null;
+}
+
+// ─── Match Key ───────────────────────────────────────────────────────────────
 
 /**
  * Produce the match key for a token based on the strategy.

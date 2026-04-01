@@ -76,14 +76,14 @@ describe('compareTokens — ignore_first_segment (default)', () => {
 describe('compareTokens — full_name', () => {
   const opts = { matchStrategy: 'full_name' as const };
 
-  it('does NOT match tokens with different first segments', () => {
+  it('detects tokens with different first segments as relocated', () => {
     const source = [variable('colour/primary/resting', 'Tokens')];
     const comp = [variable('thesun/primary/resting', 'Tokens', COMP)];
     const issues = compareTokens(source, comp, SOURCE, COMP, opts);
 
-    expect(issues).toHaveLength(2);
-    expect(issues.find(i => i.type === 'missing_in_comparison')).toBeDefined();
-    expect(issues.find(i => i.type === 'missing_in_source')).toBeDefined();
+    expect(issues).toHaveLength(1);
+    expect(issues[0].type).toBe('naming_mismatch');
+    expect(issues[0].hint).toContain('different groups');
   });
 
   it('matches when names are identical', () => {
@@ -98,6 +98,108 @@ describe('compareTokens — full_name', () => {
     const issues = compareTokens(source, comp, SOURCE, COMP, opts);
 
     expect(issues).toHaveLength(2);
+  });
+});
+
+describe('compareTokens — naming mismatch detection', () => {
+  it('detects number padding difference ("00" vs "0")', () => {
+    const source = [variable('brand/border-width-00', 'Tokens')];
+    const comp = [variable('theme/border-width-0', 'Tokens', COMP)];
+    const issues = compareTokens(source, comp, SOURCE, COMP);
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0].type).toBe('naming_mismatch');
+    expect(issues[0].sourceName).toBe('brand/border-width-00');
+    expect(issues[0].comparisonName).toBe('theme/border-width-0');
+    expect(issues[0].hint).toContain('numbers are written differently');
+  });
+
+  it('detects case difference', () => {
+    const source = [variable('brand/Primary/Resting', 'Tokens')];
+    const comp = [variable('theme/primary/resting', 'Tokens', COMP)];
+    const issues = compareTokens(source, comp, SOURCE, COMP);
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0].type).toBe('naming_mismatch');
+    expect(issues[0].hint).toContain('capitalisation');
+  });
+
+  it('detects separator style difference', () => {
+    const source = [style('brand/fill-primary', 'PAINT_STYLE')];
+    const comp = [style('theme/fill_primary', 'PAINT_STYLE', COMP)];
+    const issues = compareTokens(source, comp, SOURCE, COMP);
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0].type).toBe('naming_mismatch');
+    expect(issues[0].hint).toContain('different separators');
+  });
+
+  it('detects colour vs color spelling', () => {
+    const source = [variable('brand/colour/primary', 'Tokens')];
+    const comp = [variable('theme/color/primary', 'Tokens', COMP)];
+    const issues = compareTokens(source, comp, SOURCE, COMP);
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0].type).toBe('naming_mismatch');
+    expect(issues[0].hint).toContain('different spelling');
+  });
+
+  it('detects grey vs gray spelling', () => {
+    const source = [style('brand/grey-500', 'PAINT_STYLE')];
+    const comp = [style('theme/gray-500', 'PAINT_STYLE', COMP)];
+    const issues = compareTokens(source, comp, SOURCE, COMP);
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0].type).toBe('naming_mismatch');
+    expect(issues[0].hint).toContain('different spelling');
+  });
+
+  it('detects relocated tokens (same name, different folder)', () => {
+    const source = [variable('palette/Yellow/100', 'Primitives')];
+    const comp = [variable('palette/Unused/Yellow/100', 'Primitives', COMP)];
+    const issues = compareTokens(source, comp, SOURCE, COMP);
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0].type).toBe('naming_mismatch');
+    expect(issues[0].hint).toContain('different groups');
+    expect(issues[0].hint).toContain('Unused');
+  });
+
+  it('detects relocated tokens with deeper nesting', () => {
+    const source = [variable('tokens/core/Yellow/100', 'Primitives')];
+    const comp = [variable('tokens/archive/old/Yellow/100', 'Primitives', COMP)];
+    const issues = compareTokens(source, comp, SOURCE, COMP);
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0].type).toBe('naming_mismatch');
+    expect(issues[0].hint).toContain('different groups');
+  });
+
+  it('does not false-positive on genuinely different tokens', () => {
+    const source = [variable('brand/primary/resting', 'Tokens')];
+    const comp = [variable('theme/secondary/hover', 'Tokens', COMP)];
+    const issues = compareTokens(source, comp, SOURCE, COMP);
+
+    expect(issues).toHaveLength(2);
+    expect(issues.every(i => i.type !== 'naming_mismatch')).toBe(true);
+  });
+
+  it('pairs mismatches correctly and leaves genuinely missing tokens', () => {
+    const source = [
+      variable('brand/border-width-00', 'Tokens'),
+      variable('brand/unique-source', 'Tokens'),
+    ];
+    const comp = [
+      variable('theme/border-width-0', 'Tokens', COMP),
+      variable('theme/unique-comp', 'Tokens', COMP),
+    ];
+    const issues = compareTokens(source, comp, SOURCE, COMP);
+
+    const mismatches = issues.filter(i => i.type === 'naming_mismatch');
+    const missing = issues.filter(i => i.type !== 'naming_mismatch');
+
+    expect(mismatches).toHaveLength(1);
+    expect(missing).toHaveLength(2);
   });
 });
 

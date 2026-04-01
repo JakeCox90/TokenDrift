@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'preact/hooks';
-import type { ComparisonConfig, DriftIssue, NormalisedToken, SandboxToUIMessage, LinkedLibrary, FileReference } from '../types';
+import type { ComparisonConfig, DriftIssue, NormalisedToken, SandboxToUIMessage, LinkedLibrary, FileReference, LibraryFileKeys } from '../types';
 import { compareTokens } from './diff/engine';
 import { fetchFileTokens, FigmaApiError } from './api/figma-rest';
 import { useStorage } from './hooks/use-storage';
@@ -24,6 +24,7 @@ export function App() {
   const [view, setView] = useState<View>('setup');
   const [config, setConfig] = useState<ComparisonConfig>(DEFAULT_CONFIG);
   const [issues, setIssues] = useState<DriftIssue[]>([]);
+  const [sourceCollections, setSourceCollections] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [libraries, setLibraries] = useState<LinkedLibrary[]>([]);
@@ -38,6 +39,10 @@ export function App() {
 
   // Recent files stored in clientStorage
   const [storedRecent, setStoredRecent] = useStorage('recent-files');
+
+  // Library file key mappings stored in clientStorage
+  const [storedLibKeys, setStoredLibKeys] = useStorage('library-file-keys');
+  const [libraryFileKeys, setLibraryFileKeys] = useState<LibraryFileKeys>({});
 
   // Load persisted config on mount
   useEffect(() => {
@@ -62,6 +67,17 @@ export function App() {
       }
     }
   }, [storedRecent]);
+
+  // Load library file key mappings on mount
+  useEffect(() => {
+    if (storedLibKeys) {
+      try {
+        setLibraryFileKeys(JSON.parse(storedLibKeys) as LibraryFileKeys);
+      } catch {
+        // Invalid stored keys
+      }
+    }
+  }, [storedLibKeys]);
 
   // Fetch linked libraries on mount
   useEffect(() => {
@@ -91,6 +107,19 @@ export function App() {
     setPat(newPat);
   }, [setPat]);
 
+  const handleLibraryFileKeyChange = useCallback((libraryName: string, fileKey: string | null) => {
+    setLibraryFileKeys(prev => {
+      const updated = { ...prev };
+      if (fileKey) {
+        updated[libraryName] = fileKey;
+      } else {
+        delete updated[libraryName];
+      }
+      setStoredLibKeys(JSON.stringify(updated));
+      return updated;
+    });
+  }, [setStoredLibKeys]);
+
   /** Add a file to the recent files list (deduplicated, max 5) */
   const addToRecent = useCallback((file: FileReference) => {
     setRecentFilesState(prev => {
@@ -103,7 +132,14 @@ export function App() {
 
   // Run comparison
   const handleRunComparison = useCallback(async () => {
-    if (!pat) return;
+    const hasRestFiles = config.comparisonFiles.some(f => !f.libraryCollectionKeys);
+    const needsExternalSource = config.sourceType === 'external';
+
+    // Only require PAT if we need REST API
+    if ((hasRestFiles || needsExternalSource) && !pat) {
+      setError('Access token required to compare external files. Save one in settings.');
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -115,7 +151,7 @@ export function App() {
 
       if (config.sourceType === 'current') {
         sourceTokens = await getLocalTokens();
-      } else if (config.sourceFileKey) {
+      } else if (config.sourceFileKey && pat) {
         sourceTokens = await fetchFileTokens(config.sourceFileKey, pat);
       } else {
         throw new Error('No source file specified');
@@ -125,20 +161,45 @@ export function App() {
         ? 'local'
         : config.sourceFileKey!;
 
+      // Re-fetch library collection keys to pick up any republished changes
+      const freshLibraries = await getLinkedLibraries();
+      setLibraries(freshLibraries);
+      const freshKeysByName = new Map(
+        freshLibraries.map(lib => [lib.name, lib.collectionKeys]),
+      );
+
       // Compare against each file
       const allIssues: DriftIssue[] = [];
 
       for (const compFile of config.comparisonFiles) {
-        // Track in recent files
-        addToRecent(compFile);
+        // Track in recent files (only non-library files)
+        if (!compFile.libraryCollectionKeys) {
+          addToRecent(compFile);
+        }
 
         try {
-          const compTokens = await fetchFileTokens(compFile.fileKey, pat);
+          let compTokens: NormalisedToken[];
+
+          if (compFile.libraryCollectionKeys) {
+            // Library — use REST API when file key is known (always fresh, no cache)
+            const libFileKey = libraryFileKeys[compFile.label];
+            if (pat && libFileKey) {
+              compTokens = await fetchFileTokens(libFileKey, pat);
+            } else {
+              // Fallback: Plugin API (may return cached/stale data)
+              const keys = freshKeysByName.get(compFile.label) ?? compFile.libraryCollectionKeys;
+              compTokens = await getLibraryTokens(keys, compFile.label);
+            }
+          } else {
+            // External file — fetch via REST API
+            compTokens = await fetchFileTokens(compFile.fileKey, pat!);
+          }
+
           const fileIssues = compareTokens(
             sourceTokens,
             compTokens,
             sourceFile,
-            compFile.fileKey,
+            compFile.libraryCollectionKeys ? compFile.label : compFile.fileKey,
             { matchStrategy: config.matchStrategy ?? 'ignore_first_segment' },
           );
           allIssues.push(...fileIssues);
@@ -157,6 +218,27 @@ export function App() {
         }
       }
 
+      // Extract unique collection/style-type group names from source tokens
+      const collectionSet = new Set<string>();
+      for (const t of sourceTokens) {
+        if (t.type === 'VARIABLE' && t.collection) {
+          collectionSet.add(t.collection);
+        }
+      }
+      // Add style type groups if source has those token types
+      const styleLabels: Record<string, string> = {
+        PAINT_STYLE: 'Colour Styles',
+        TEXT_STYLE: 'Text Styles',
+        EFFECT_STYLE: 'Effect Styles',
+        GRID_STYLE: 'Layout Grid Styles',
+      };
+      for (const t of sourceTokens) {
+        if (t.type in styleLabels) {
+          collectionSet.add(styleLabels[t.type]);
+        }
+      }
+      setSourceCollections(Array.from(collectionSet));
+
       setIssues(allIssues);
       setView('results');
     } catch (err) {
@@ -164,7 +246,7 @@ export function App() {
     } finally {
       setLoading(false);
     }
-  }, [config, pat, addToRecent]);
+  }, [config, pat, addToRecent, libraryFileKeys]);
 
   if (patLoading) {
     return (
@@ -219,12 +301,15 @@ export function App() {
           libraries={libraries}
           libraryError={libraryError}
           recentFiles={recentFiles}
+          libraryFileKeys={libraryFileKeys}
+          onLibraryFileKeyChange={handleLibraryFileKeyChange}
         />
       )}
 
       {view === 'results' && (
         <ResultsView
           issues={issues}
+          sourceCollections={sourceCollections}
           onBack={() => setView('setup')}
           onRefresh={handleRunComparison}
           loading={loading}
@@ -263,5 +348,69 @@ function getLocalTokens(): Promise<NormalisedToken[]> {
 
     window.addEventListener('message', handler);
     postToSandbox({ type: 'get-local-tokens' });
+  });
+}
+
+/** Re-fetch linked libraries from the plugin sandbox to get fresh collection keys */
+function getLinkedLibraries(): Promise<LinkedLibrary[]> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('Timed out fetching linked libraries'));
+    }, 15000);
+
+    const handler = (event: MessageEvent) => {
+      const msg = event.data?.pluginMessage as SandboxToUIMessage | undefined;
+      if (!msg) return;
+
+      if (msg.type === 'linked-libraries') {
+        cleanup();
+        resolve(msg.libraries);
+      }
+      if (msg.type === 'error') {
+        cleanup();
+        reject(new Error(msg.message));
+      }
+    };
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      window.removeEventListener('message', handler);
+    };
+
+    window.addEventListener('message', handler);
+    postToSandbox({ type: 'get-linked-libraries' });
+  });
+}
+
+/** Request library tokens from the plugin sandbox via Plugin API */
+function getLibraryTokens(collectionKeys: string[], libraryName: string): Promise<NormalisedToken[]> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error(`Timed out fetching tokens from ${libraryName}`));
+    }, 15000);
+
+    const handler = (event: MessageEvent) => {
+      const msg = event.data.pluginMessage as SandboxToUIMessage | undefined;
+      if (!msg) return;
+
+      if (msg.type === 'library-tokens' && msg.libraryName === libraryName) {
+        cleanup();
+        resolve(msg.tokens);
+      }
+      if (msg.type === 'error') {
+        cleanup();
+        reject(new Error(msg.message));
+      }
+    };
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      window.removeEventListener('message', handler);
+    };
+
+    window.addEventListener('message', handler);
+    postToSandbox({ type: 'get-library-tokens', collectionKeys, libraryName });
   });
 }

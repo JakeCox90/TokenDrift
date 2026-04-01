@@ -45,11 +45,14 @@ export interface DriftIssue {
   comparisonFile: string;
   /** Collection name (variables only) */
   collection?: string;
+  /** Human-readable explanation of what's wrong (for naming_mismatch issues) */
+  hint?: string;
 }
 
 export type DriftIssueType =
   | 'missing_in_source'
-  | 'missing_in_comparison';
+  | 'missing_in_comparison'
+  | 'naming_mismatch';
 
 // ─── File & Config ───────────────────────────────────────────────────────────
 
@@ -61,6 +64,8 @@ export interface FileReference {
   label: string;
   /** Thumbnail URL from Figma API */
   thumbnailUrl?: string;
+  /** If this came from a linked library, the collection keys to fetch via Plugin API */
+  libraryCollectionKeys?: string[];
 }
 
 /** How tokens are matched across files */
@@ -87,9 +92,14 @@ export interface ComparisonConfig {
 export interface LinkedLibrary {
   /** Library display name */
   name: string;
+  /** Figma file key for this library (if extractable or user-provided) */
+  fileKey?: string;
   /** Variable collection keys belonging to this library */
   collectionKeys: string[];
 }
+
+/** Stored mapping of library name → Figma file key (user-provided) */
+export type LibraryFileKeys = Record<string, string>;
 
 // ─── Sandbox ↔ UI Messages ──────────────────────────────────────────────────
 
@@ -97,13 +107,16 @@ export interface LinkedLibrary {
 export type UIToSandboxMessage =
   | { type: 'get-local-tokens' }
   | { type: 'get-linked-libraries' }
+  | { type: 'get-library-tokens'; collectionKeys: string[]; libraryName: string }
   | { type: 'get-storage'; key: string }
-  | { type: 'set-storage'; key: string; value: string };
+  | { type: 'set-storage'; key: string; value: string }
+  | { type: 'restart' };
 
 /** Messages sent from sandbox to UI */
 export type SandboxToUIMessage =
   | { type: 'local-tokens'; tokens: NormalisedToken[] }
   | { type: 'linked-libraries'; libraries: LinkedLibrary[]; error?: string }
+  | { type: 'library-tokens'; libraryName: string; tokens: NormalisedToken[] }
   | { type: 'storage-result'; key: string; value: string | null }
   | { type: 'storage-set'; key: string; success: boolean }
   | { type: 'error'; message: string };
