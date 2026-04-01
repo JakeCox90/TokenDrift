@@ -4,15 +4,15 @@ type CSSProperties = JSX.CSSProperties;
 
 export const colors = {
   // Brand
-  brand: '#6C5CE7',
-  brandHover: '#5A4BD1',
-  brandSubtle: 'rgba(108, 92, 231, 0.08)',
-  brandLight: 'rgba(108, 92, 231, 0.12)',
+  brand: '#7695EF',
+  brandHover: '#5F80E0',
+  brandSubtle: 'rgba(118, 149, 239, 0.08)',
+  brandLight: 'rgba(118, 149, 239, 0.12)',
 
   // Neutrals
   text: '#1A1A2E',
   textSecondary: '#5C5C7A',
-  textMuted: '#9C9CB5',
+  textMuted: '#6B6B87',
   bg: '#FFFFFF',
   bgSecondary: '#F8F8FC',
   bgTertiary: '#F0F0F7',
@@ -20,15 +20,15 @@ export const colors = {
   borderLight: '#F0F0F7',
 
   // Semantic
-  error: '#E74C6F',
-  errorBg: 'rgba(231, 76, 111, 0.08)',
-  errorBorder: 'rgba(231, 76, 111, 0.2)',
-  success: '#00B894',
-  successBg: 'rgba(0, 184, 148, 0.08)',
-  successBorder: 'rgba(0, 184, 148, 0.2)',
-  warning: '#E8A317',
-  warningBg: 'rgba(232, 163, 23, 0.08)',
-  warningBorder: 'rgba(232, 163, 23, 0.2)',
+  error: '#D03A5C',
+  errorBg: 'rgba(208, 58, 92, 0.08)',
+  errorBorder: 'rgba(208, 58, 92, 0.2)',
+  success: '#008767',
+  successBg: 'rgba(0, 135, 103, 0.08)',
+  successBorder: 'rgba(0, 135, 103, 0.2)',
+  warning: '#8B6914',
+  warningBg: 'rgba(139, 105, 20, 0.08)',
+  warningBorder: 'rgba(139, 105, 20, 0.2)',
 } as const;
 
 export const shadows = {
@@ -43,13 +43,13 @@ export const button: CSSProperties = {
   background: colors.brand,
   color: '#fff',
   border: 'none',
-  borderRadius: '8px',
+  borderRadius: '999px',
   cursor: 'pointer',
   fontSize: '12px',
   fontWeight: 600,
   width: '100%',
   letterSpacing: '0.01em',
-  boxShadow: `0 1px 3px rgba(108, 92, 231, 0.3)`,
+  boxShadow: `0 1px 3px rgba(118, 149, 239, 0.3)`,
   transition: 'all 0.15s ease',
 };
 
@@ -131,6 +131,6 @@ export const badge = (bg: string, color: string, borderColor?: string): CSSPrope
 export const divider: CSSProperties = {
   height: '1px',
   background: colors.border,
-  margin: '16px 0',
+  margin: '8px 0',
   border: 'none',
 };

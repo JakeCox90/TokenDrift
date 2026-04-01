@@ -24,6 +24,15 @@ figma.ui.onmessage = async (msg: UIToSandboxMessage) => {
       }
       break;
     }
+    case 'get-library-tokens': {
+      try {
+        var libTokens = await getLibraryTokens(msg.collectionKeys, msg.libraryName);
+        sendToUI({ type: 'library-tokens', libraryName: msg.libraryName, tokens: libTokens });
+      } catch (err) {
+        sendToUI({ type: 'error', message: String(err) });
+      }
+      break;
+    }
     case 'get-storage': {
       const value = await figma.clientStorage.getAsync(msg.key);
       sendToUI({ type: 'storage-result', key: msg.key, value: value ?? null });
@@ -36,6 +45,10 @@ figma.ui.onmessage = async (msg: UIToSandboxMessage) => {
       } catch {
         sendToUI({ type: 'storage-set', key: msg.key, success: false });
       }
+      break;
+    }
+    case 'restart': {
+      figma.closePlugin('Reopen TokenDrift to load fresh library data');
       break;
     }
   }
@@ -100,27 +113,73 @@ async function getLocalTokens(): Promise<NormalisedToken[]> {
 }
 
 async function getLinkedLibraries(): Promise<LinkedLibrary[]> {
-  const libraryMap = new Map<string, string[]>();
+  var libraryMap: { [name: string]: { keys: string[]; fileKey?: string } } = {};
 
   // Variable collections
   if (figma.teamLibrary && typeof figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync === 'function') {
     try {
-      const collections = await figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync();
-      for (const c of collections) {
-        if (!libraryMap.has(c.libraryName)) {
-          libraryMap.set(c.libraryName, []);
+      var collections = await figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync();
+      for (var i = 0; i < collections.length; i++) {
+        var c = collections[i];
+        if (!libraryMap[c.libraryName]) {
+          libraryMap[c.libraryName] = { keys: [] };
         }
-        libraryMap.get(c.libraryName)!.push(c.key);
+        libraryMap[c.libraryName].keys.push(c.key);
+
+        // Try to extract file key — log the key format for debugging
+        if (!libraryMap[c.libraryName].fileKey && c.key) {
+          // Figma collection keys may contain the file key
+          // Common formats: "fileKey:nodeId" or just a hash
+          var parts = c.key.split(':');
+          if (parts.length >= 2) {
+            libraryMap[c.libraryName].fileKey = parts[0];
+          }
+        }
       }
     } catch (_) {
       // API not available in this context
     }
   }
 
-  const libraries: LinkedLibrary[] = [];
-  for (const _ref of libraryMap) {
-    libraries.push({ name: _ref[0], collectionKeys: _ref[1] });
+  var libraries: LinkedLibrary[] = [];
+  var names = Object.keys(libraryMap);
+  for (var j = 0; j < names.length; j++) {
+    var name = names[j];
+    var entry = libraryMap[name];
+    libraries.push({
+      name: name,
+      fileKey: entry.fileKey,
+      collectionKeys: entry.keys,
+    });
   }
 
   return libraries;
+}
+
+async function getLibraryTokens(collectionKeys: string[], libraryName: string): Promise<NormalisedToken[]> {
+  var tokens: NormalisedToken[] = [];
+
+  if (!figma.teamLibrary || typeof figma.teamLibrary.getVariablesInLibraryCollectionAsync !== 'function') {
+    throw new Error('Library variable API not available');
+  }
+
+  for (var i = 0; i < collectionKeys.length; i++) {
+    var key = collectionKeys[i];
+    try {
+      var variables = await figma.teamLibrary.getVariablesInLibraryCollectionAsync(key);
+      for (var j = 0; j < variables.length; j++) {
+        var v = variables[j];
+        tokens.push({
+          name: v.name,
+          type: 'VARIABLE',
+          resolvedType: v.resolvedType,
+          sourceFile: libraryName,
+        });
+      }
+    } catch (_) {
+      // Skip collections we can't read
+    }
+  }
+
+  return tokens;
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'preact/hooks';
-import type { FileReference, ComparisonConfig, MatchStrategy, LinkedLibrary } from '../../types';
+import type { FileReference, ComparisonConfig, MatchStrategy, LinkedLibrary, LibraryFileKeys } from '../../types';
 import { extractFileKey } from '../utils/figma-url';
 import { fetchFileInfo } from '../api/figma-rest';
 import * as s from '../styles';
@@ -17,6 +17,98 @@ interface SetupViewProps {
   libraries: LinkedLibrary[];
   libraryError: string | null;
   recentFiles: FileReference[];
+  libraryFileKeys: LibraryFileKeys;
+  onLibraryFileKeyChange: (libraryName: string, fileKey: string | null) => void;
+}
+
+/** Shared row style for a selectable file item across all tabs */
+const fileRowStyle = (selected: boolean): Record<string, unknown> => ({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '10px',
+  padding: '10px 12px',
+  background: selected ? s.colors.brandSubtle : s.colors.bgSecondary,
+  borderRadius: '8px',
+  border: `1px solid ${selected ? s.colors.brandLight : s.colors.borderLight}`,
+  cursor: 'pointer',
+  fontSize: '11px',
+  fontWeight: 500,
+  color: s.colors.text,
+  textAlign: 'left',
+  width: '100%',
+  transition: 'all 0.15s ease',
+});
+
+/** The checkmark / plus indicator on the right of each row */
+function SelectIndicator({ selected }: { selected: boolean }) {
+  return selected ? (
+    <span style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '4px',
+      fontSize: '9px',
+      fontWeight: 600,
+      color: s.colors.brand,
+      background: s.colors.brandSubtle,
+      padding: '2px 8px',
+      borderRadius: '999px',
+      flexShrink: 0,
+      border: `1px solid ${s.colors.brandLight}`,
+    }}>
+      <span style={{ fontSize: '9px' }}>&#10003;</span>
+      Selected
+    </span>
+  ) : (
+    <span style={{ fontSize: '14px', color: s.colors.textMuted, flexShrink: 0 }}>+</span>
+  );
+}
+
+/** Extract a short label from a library/file name for the avatar */
+function nameToLetter(name: string): string {
+  // Known names
+  const lower = name.toLowerCase();
+  if (lower.includes('sun')) return 'S';
+  if (lower.includes('nca')) return 'N';
+  // First letter of first significant word
+  const words = name.split(/[\s\-_/]+/).filter(w => w.length > 0);
+  return (words[0]?.[0] ?? '?').toUpperCase();
+}
+
+/** Icon avatar for a file row */
+function FileIcon({ letter, thumbnailUrl }: { letter: string; thumbnailUrl?: string }) {
+  if (thumbnailUrl) {
+    return (
+      <img
+        src={thumbnailUrl}
+        alt=""
+        style={{
+          width: '22px',
+          height: '22px',
+          borderRadius: '6px',
+          objectFit: 'cover',
+          flexShrink: 0,
+          border: `1px solid ${s.colors.borderLight}`,
+        }}
+      />
+    );
+  }
+  return (
+    <span style={{
+      width: '22px',
+      height: '22px',
+      borderRadius: '6px',
+      background: s.colors.brandSubtle,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: '10px',
+      color: s.colors.brand,
+      fontWeight: 700,
+      flexShrink: 0,
+    }}>
+      {letter}
+    </span>
+  );
 }
 
 export function SetupView({
@@ -30,6 +122,8 @@ export function SetupView({
   libraries,
   libraryError,
   recentFiles,
+  libraryFileKeys,
+  onLibraryFileKeyChange,
 }: SetupViewProps) {
   const [fileInput, setFileInput] = useState('');
   const [patInput, setPatInput] = useState('');
@@ -40,19 +134,30 @@ export function SetupView({
     onRefreshLibraries();
   };
   const [showSettings, setShowSettings] = useState(false);
-  const [showMatchSettings, setShowMatchSettings] = useState(false);
   const [addingFile, setAddingFile] = useState(false);
 
-  const handleAddFile = (file: FileReference) => {
-    if (config.comparisonFiles.some(f => f.fileKey === file.fileKey)) {
-      setError('File already added');
-      return;
+  const isSelected = (fileKey: string) =>
+    config.comparisonFiles.some(f => f.fileKey === fileKey);
+
+  const isSelectedByLabel = (label: string) =>
+    config.comparisonFiles.some(f => f.label === label);
+
+  const toggleFile = (file: FileReference) => {
+    if (isSelected(file.fileKey)) {
+      onConfigChange({ ...config, comparisonFiles: [] });
+    } else {
+      setError('');
+      onConfigChange({ ...config, comparisonFiles: [file] });
     }
-    setError('');
-    onConfigChange({
-      ...config,
-      comparisonFiles: [...config.comparisonFiles, file],
-    });
+  };
+
+  const toggleByLabel = (label: string, file: FileReference) => {
+    if (isSelectedByLabel(label)) {
+      onConfigChange({ ...config, comparisonFiles: [] });
+    } else {
+      setError('');
+      onConfigChange({ ...config, comparisonFiles: [file] });
+    }
   };
 
   const handleAddFromInput = async () => {
@@ -67,24 +172,23 @@ export function SetupView({
       return;
     }
 
+    if (isSelected(key)) {
+      setError('File already added');
+      setFileInput('');
+      return;
+    }
+
     setAddingFile(true);
     setError('');
     try {
       const info = await fetchFileInfo(key, pat);
-      handleAddFile({ fileKey: key, label: info.name, thumbnailUrl: info.thumbnailUrl });
+      toggleFile({ fileKey: key, label: info.name, thumbnailUrl: info.thumbnailUrl });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch file info');
     } finally {
       setAddingFile(false);
       setFileInput('');
     }
-  };
-
-  const handleRemoveFile = (fileKey: string) => {
-    onConfigChange({
-      ...config,
-      comparisonFiles: config.comparisonFiles.filter(f => f.fileKey !== fileKey),
-    });
   };
 
   const handleSavePat = () => {
@@ -123,12 +227,23 @@ export function SetupView({
     }
   }, [config.comparisonFiles, pat]);
 
-  const canRun = config.comparisonFiles.length > 0 && !!pat && !loading;
+  // PAT is only needed if we have non-library files or an external source
+  const hasRestFiles = config.comparisonFiles.some(f => !f.libraryCollectionKeys);
+  const needsPat = hasRestFiles || config.sourceType === 'external';
+  const canRun = config.comparisonFiles.length > 0 && (!needsPat || !!pat) && !loading;
+  const selectedCount = config.comparisonFiles.length;
+
+  // Determine which files were added via URL (not visible in Libraries or Recent)
+  const libraryLabels = new Set(libraries.map(l => l.name));
+  const recentKeys = new Set(recentFiles.map(r => r.fileKey));
+  const urlAddedFiles = config.comparisonFiles.filter(
+    f => !libraryLabels.has(f.label) && !recentKeys.has(f.fileKey),
+  );
 
   const tabs: { key: CompareTab; label: string; count?: number }[] = [
     { key: 'libraries', label: 'Libraries', count: libraries.length },
     { key: 'recent', label: 'Recent', count: recentFiles.length },
-    { key: 'url', label: 'URL' },
+    { key: 'url', label: 'URL', count: urlAddedFiles.length > 0 ? urlAddedFiles.length : undefined },
   ];
 
   return (
@@ -146,7 +261,7 @@ export function SetupView({
             width: '24px',
             height: '24px',
             borderRadius: '7px',
-            background: `linear-gradient(135deg, ${s.colors.brand}, #a29bfe)`,
+            background: `linear-gradient(135deg, ${s.colors.brand}, #a8c0f7)`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -159,28 +274,6 @@ export function SetupView({
           <h2 style={{ fontSize: '15px', fontWeight: 700, color: s.colors.text, letterSpacing: '-0.01em' }}>
             TokenDrift
           </h2>
-          {pat && (
-            <button
-              onClick={() => setShowSettings(!showSettings)}
-              style={{
-                marginLeft: 'auto',
-                padding: '6px',
-                background: showSettings ? s.colors.bgTertiary : 'transparent',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                lineHeight: 0,
-                transition: 'all 0.15s ease',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-              title="Settings"
-              dangerouslySetInnerHTML={{
-                __html: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${showSettings ? s.colors.text : s.colors.textMuted}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
-              }}
-            />
-          )}
         </div>
         <p style={{ color: s.colors.textMuted, fontSize: '11px', marginLeft: '32px' }}>
           Compare design tokens across Figma files
@@ -215,42 +308,6 @@ export function SetupView({
         </div>
       )}
 
-      {/* Settings dropdown — shown when gear is clicked */}
-      {pat && showSettings && (
-        <div style={{
-          ...s.card,
-          marginBottom: '16px',
-          padding: '12px',
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-            <label style={{ ...s.label, margin: 0 }}>Access Token</label>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{
-              flex: 1,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}>
-              <span style={{ fontSize: '12px', color: s.colors.success }}>&#10003;</span>
-              <span style={{ fontSize: '11px', fontWeight: 500, color: s.colors.textSecondary }}>
-                Token saved
-              </span>
-            </div>
-            <button
-              style={{
-                ...s.buttonGhost,
-                fontSize: '11px',
-                color: s.colors.error,
-              }}
-              onClick={() => { onPatChange(''); setShowSettings(false); }}
-            >
-              Remove
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Source selector */}
       <div style={s.section}>
         <label style={s.label}>Source</label>
@@ -259,7 +316,7 @@ export function SetupView({
           gap: '4px',
           padding: '3px',
           background: s.colors.bgSecondary,
-          borderRadius: '8px',
+          borderRadius: '999px',
           border: `1px solid ${s.colors.borderLight}`,
         }}>
           {(['current', 'external'] as const).map(type => (
@@ -275,7 +332,7 @@ export function SetupView({
                 padding: '7px 12px',
                 background: config.sourceType === type ? s.colors.bg : 'transparent',
                 border: 'none',
-                borderRadius: '6px',
+                borderRadius: '999px',
                 cursor: 'pointer',
                 fontSize: '11px',
                 fontWeight: config.sourceType === type ? 600 : 400,
@@ -313,7 +370,7 @@ export function SetupView({
           gap: '2px',
           padding: '3px',
           background: s.colors.bgSecondary,
-          borderRadius: '8px',
+          borderRadius: '999px',
           border: `1px solid ${s.colors.borderLight}`,
           marginBottom: '10px',
         }}>
@@ -326,7 +383,7 @@ export function SetupView({
                 padding: '6px 8px',
                 background: activeTab === tab.key ? s.colors.bg : 'transparent',
                 border: 'none',
-                borderRadius: '6px',
+                borderRadius: '999px',
                 cursor: 'pointer',
                 fontSize: '10px',
                 fontWeight: activeTab === tab.key ? 600 : 400,
@@ -356,35 +413,17 @@ export function SetupView({
           ))}
         </div>
 
-        {/* Tab content: URL */}
-        {activeTab === 'url' && (
-          <div>
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
-              <input
-                style={{ ...s.input, flex: 1 }}
-                placeholder="Paste Figma file URL or key..."
-                value={fileInput}
-                disabled={addingFile}
-                onInput={(e) => {
-                  setFileInput((e.target as HTMLInputElement).value);
-                  setError('');
-                }}
-                onKeyDown={(e) => e.key === 'Enter' && handleAddFromInput()}
-              />
-              <button
-                style={{ ...s.button, width: 'auto', whiteSpace: 'nowrap', padding: '9px 14px', opacity: addingFile ? 0.6 : 1 }}
-                onClick={handleAddFromInput}
-                disabled={addingFile}
-              >
-                {addingFile ? '...' : 'Add'}
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Tab content: Libraries */}
         {activeTab === 'libraries' && (
           <div>
+            <p style={{
+              fontSize: '10px',
+              color: s.colors.textMuted,
+              margin: '0 0 10px 0',
+              fontStyle: 'italic',
+            }}>
+              Ensure your libraries are published to stay up to date.
+            </p>
             {libraries.length === 0 && !libraryError ? (
               <div style={{
                 padding: '20px 16px',
@@ -433,64 +472,66 @@ export function SetupView({
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 {libraries.map(lib => {
-                  const alreadyAdded = config.comparisonFiles.some(f => f.label === lib.name);
+                  const selected = isSelectedByLabel(lib.name);
+                  const storedKey = libraryFileKeys[lib.name];
                   return (
-                    <button
+                    <div
                       key={lib.name}
                       onClick={() => {
-                        if (alreadyAdded) {
-                          handleRemoveFile(lib.name);
-                        } else {
-                          handleAddFile({ fileKey: lib.name, label: lib.name });
-                        }
+                        toggleByLabel(lib.name, {
+                          fileKey: storedKey ? storedKey : `library:${lib.name}`,
+                          label: lib.name,
+                          libraryCollectionKeys: lib.collectionKeys,
+                        });
                       }}
                       style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '10px',
-                        padding: '10px 12px',
-                        background: alreadyAdded ? s.colors.bgTertiary : s.colors.bgSecondary,
-                        borderRadius: '8px',
-                        border: `1px solid ${s.colors.borderLight}`,
-                        cursor: alreadyAdded ? 'default' : 'pointer',
-                        fontSize: '11px',
-                        fontWeight: 500,
-                        color: alreadyAdded ? s.colors.textMuted : s.colors.text,
-                        textAlign: 'left',
-                        width: '100%',
-                        transition: 'all 0.15s ease',
-                        opacity: alreadyAdded ? 0.6 : 1,
+                        ...fileRowStyle(selected),
+                        flexDirection: 'column',
+                        alignItems: 'stretch',
+                        gap: '0',
                       }}
                     >
-                      <span style={{
-                        width: '22px',
-                        height: '22px',
-                        borderRadius: '6px',
-                        background: s.colors.brandSubtle,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '10px',
-                        color: s.colors.brand,
-                        fontWeight: 700,
-                        flexShrink: 0,
-                      }}>
-                        L
-                      </span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {lib.name}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <FileIcon letter={nameToLetter(lib.name)} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {lib.name}
+                          </div>
+                          <div style={{ fontSize: '9px', color: s.colors.textMuted, marginTop: '1px' }}>
+                            {lib.collectionKeys.length} collection{lib.collectionKeys.length !== 1 ? 's' : ''}
+                            {storedKey ? ' · linked' : ''}
+                          </div>
                         </div>
-                        <div style={{ fontSize: '9px', color: s.colors.textMuted, marginTop: '1px' }}>
-                          {lib.collectionKeys.length} collection{lib.collectionKeys.length !== 1 ? 's' : ''}
-                        </div>
+                        <SelectIndicator selected={selected} />
                       </div>
-                      {alreadyAdded ? (
-                        <span style={{ fontSize: '10px', color: s.colors.success }}>&#10003;</span>
-                      ) : (
-                        <span style={{ fontSize: '14px', color: s.colors.textMuted }}>+</span>
+                      {selected && (
+                        <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: `1px solid ${s.colors.borderLight}`, animation: 'fadeIn 0.2s ease' }}>
+                          <input
+                            style={{ ...s.input, fontSize: '10px', padding: '5px 8px' }}
+                            placeholder="Paste library file URL for live data"
+                            value={storedKey ? `https://www.figma.com/file/${storedKey}` : ''}
+                            onInput={(e) => {
+                              e.stopPropagation();
+                              const url = (e.target as HTMLInputElement).value.trim();
+                              if (!url) {
+                                onLibraryFileKeyChange(lib.name, null);
+                                return;
+                              }
+                              const key = extractFileKey(url);
+                              if (key) {
+                                onLibraryFileKeyChange(lib.name, key);
+                              }
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <p style={{ fontSize: '9px', color: s.colors.textMuted, margin: '3px 0 0' }}>
+                            {storedKey
+                              ? 'Comparison will use the REST API for always-fresh data.'
+                              : 'Without a URL, data may be stale until you restart the plugin.'}
+                          </p>
+                        </div>
                       )}
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -516,83 +557,80 @@ export function SetupView({
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 {recentFiles.map(file => {
-                  const alreadyAdded = config.comparisonFiles.some(f => f.fileKey === file.fileKey);
+                  const selected = isSelected(file.fileKey);
                   return (
                     <button
                       key={file.fileKey}
-                      onClick={() => {
-                        if (alreadyAdded) {
-                          handleRemoveFile(file.fileKey);
-                        } else {
-                          handleAddFile(file);
-                        }
-                      }}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '10px',
-                        padding: '10px 12px',
-                        background: alreadyAdded ? s.colors.bgTertiary : s.colors.bgSecondary,
-                        borderRadius: '8px',
-                        border: `1px solid ${s.colors.borderLight}`,
-                        cursor: 'pointer',
-                        fontSize: '11px',
-                        fontWeight: 500,
-                        color: alreadyAdded ? s.colors.textMuted : s.colors.text,
-                        textAlign: 'left',
-                        width: '100%',
-                        transition: 'all 0.15s ease',
-                        opacity: alreadyAdded ? 0.6 : 1,
-                      }}
+                      onClick={() => toggleFile(file)}
+                      style={fileRowStyle(selected)}
                     >
-                      {file.thumbnailUrl ? (
-                        <img
-                          src={file.thumbnailUrl}
-                          alt=""
-                          style={{
-                            width: '22px',
-                            height: '22px',
-                            borderRadius: '6px',
-                            objectFit: 'cover',
-                            flexShrink: 0,
-                            border: `1px solid ${s.colors.borderLight}`,
-                          }}
-                        />
-                      ) : (
-                        <span style={{
-                          width: '22px',
-                          height: '22px',
-                          borderRadius: '6px',
-                          background: s.colors.bgTertiary,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: '10px',
-                          color: s.colors.textMuted,
-                          fontWeight: 600,
-                          flexShrink: 0,
-                        }}>
-                          R
-                        </span>
-                      )}
+                      <FileIcon letter={nameToLetter(file.label)} thumbnailUrl={file.thumbnailUrl} />
                       <span style={{
                         flex: 1,
                         fontSize: '11px',
-                        color: alreadyAdded ? s.colors.textMuted : s.colors.textSecondary,
+                        color: selected ? s.colors.textMuted : s.colors.textSecondary,
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
                       }}>
                         {file.label}
                       </span>
-                      {alreadyAdded ? (
-                        <span style={{ fontSize: '10px', color: s.colors.success }}>&#10003;</span>
-                      ) : (
-                        <span style={{ fontSize: '14px', color: s.colors.textMuted }}>+</span>
-                      )}
+                      <SelectIndicator selected={selected} />
                     </button>
                   );
                 })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab content: URL */}
+        {activeTab === 'url' && (
+          <div>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: urlAddedFiles.length > 0 ? '8px' : '0' }}>
+              <input
+                style={{ ...s.input, flex: 1 }}
+                placeholder="Paste Figma file URL or key..."
+                value={fileInput}
+                disabled={addingFile}
+                onInput={(e) => {
+                  setFileInput((e.target as HTMLInputElement).value);
+                  setError('');
+                }}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddFromInput()}
+              />
+              <button
+                style={{ ...s.button, width: 'auto', whiteSpace: 'nowrap', padding: '9px 14px', opacity: addingFile ? 0.6 : 1 }}
+                onClick={handleAddFromInput}
+                disabled={addingFile}
+              >
+                {addingFile ? '...' : 'Add'}
+              </button>
+            </div>
+            {/* Show URL-added files as toggleable rows */}
+            {urlAddedFiles.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {urlAddedFiles.map(file => (
+                  <button
+                    key={file.fileKey}
+                    onClick={() => toggleFile(file)}
+                    style={fileRowStyle(true)}
+                  >
+                    <FileIcon letter={nameToLetter(file.label)} thumbnailUrl={file.thumbnailUrl} />
+                    <span style={{
+                      flex: 1,
+                      fontSize: '11px',
+                      fontWeight: 500,
+                      color: s.colors.textSecondary,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {file.label}
+                    </span>
+                    <SelectIndicator selected={true} />
+                  </button>
+                ))}
               </div>
             )}
           </div>
@@ -613,90 +651,6 @@ export function SetupView({
           </div>
         )}
 
-        {/* URL-added files (not visible in Libraries or Recent tabs) */}
-        {(() => {
-          const libraryNames = new Set(libraries.map(l => l.name));
-          const recentKeys = new Set(recentFiles.map(r => r.fileKey));
-          const urlOnly = config.comparisonFiles.filter(
-            f => !libraryNames.has(f.fileKey) && !recentKeys.has(f.fileKey),
-          );
-          if (urlOnly.length === 0) return null;
-          return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '10px' }}>
-              {urlOnly.map(file => (
-                <div
-                  key={file.fileKey}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    padding: '10px 12px',
-                    background: s.colors.bgTertiary,
-                    borderRadius: '8px',
-                    border: `1px solid ${s.colors.borderLight}`,
-                    fontSize: '11px',
-                  }}
-                >
-                  {file.thumbnailUrl ? (
-                    <img
-                      src={file.thumbnailUrl}
-                      alt=""
-                      style={{
-                        width: '22px',
-                        height: '22px',
-                        borderRadius: '6px',
-                        objectFit: 'cover',
-                        flexShrink: 0,
-                        border: `1px solid ${s.colors.borderLight}`,
-                      }}
-                    />
-                  ) : (
-                    <span style={{
-                      width: '22px',
-                      height: '22px',
-                      borderRadius: '6px',
-                      background: s.colors.brandSubtle,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '10px',
-                      color: s.colors.brand,
-                      fontWeight: 700,
-                      flexShrink: 0,
-                    }}>
-                      F
-                    </span>
-                  )}
-                  <span style={{
-                    flex: 1,
-                    fontSize: '11px',
-                    fontWeight: 500,
-                    color: s.colors.text,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}>
-                    {file.label}
-                  </span>
-                  <button
-                    onClick={() => handleRemoveFile(file.fileKey)}
-                    style={{
-                      ...s.buttonGhost,
-                      padding: '2px 6px',
-                      fontSize: '14px',
-                      lineHeight: 1,
-                      color: s.colors.textMuted,
-                      borderRadius: '4px',
-                    }}
-                    title="Remove"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-          );
-        })()}
       </div>
 
       </div>
@@ -708,46 +662,97 @@ export function SetupView({
         borderTop: `1px solid ${s.colors.borderLight}`,
         flexShrink: 0,
       }}>
-        {/* Match settings popover */}
-        {showMatchSettings && (
+        {/* Settings popover */}
+        {showSettings && (
           <div style={{
             ...s.card,
             marginBottom: '10px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
           }}>
-            <label style={{ ...s.label, margin: '0 0 6px' }}>Matching</label>
-            <select
-              style={s.input}
-              value={config.matchStrategy ?? 'ignore_first_segment'}
-              onChange={(e) =>
-                onConfigChange({
-                  ...config,
-                  matchStrategy: (e.target as HTMLSelectElement).value as MatchStrategy,
-                })
-              }
-            >
-              <option value="ignore_first_segment">Ignore top-level group (recommended)</option>
-              <option value="ignore_first_two_segments">Ignore top two groups</option>
-              <option value="full_name">Exact full name</option>
-            </select>
-            <p style={{ fontSize: '10px', color: s.colors.textMuted, marginTop: '6px', lineHeight: 1.4 }}>
-              {config.matchStrategy === 'full_name'
-                ? 'Tokens must have identical names to match. Brand/primary/resting will not match TheSun/primary/resting.'
-                : config.matchStrategy === 'ignore_first_two_segments'
-                ? 'Ignores the first two variable groups when matching. e.g. Brand/Colour/primary/resting and TheSun/Colors/primary/resting both match on primary/resting.'
-                : 'Ignores the top-level variable group when matching. e.g. Brand/primary/resting and TheSun/primary/resting both match on primary/resting.'
-              }
-            </p>
+            {/* Access token */}
+            {pat ? (
+              <div>
+                <label style={{ ...s.label, margin: '0 0 6px' }}>Access Token</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '12px', color: s.colors.success }}>&#10003;</span>
+                    <span style={{ fontSize: '11px', fontWeight: 500, color: s.colors.textSecondary }}>
+                      Token saved
+                    </span>
+                  </div>
+                  <button
+                    style={{ ...s.buttonGhost, fontSize: '11px', color: s.colors.error }}
+                    onClick={() => { onPatChange(''); setShowSettings(false); }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <label style={{ ...s.label, margin: '0 0 6px' }}>Access Token</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="password"
+                    style={{ ...s.input, flex: 1 }}
+                    placeholder="figd_..."
+                    value={patInput}
+                    onInput={(e) => setPatInput((e.target as HTMLInputElement).value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSavePat()}
+                  />
+                  <button
+                    style={{ ...s.button, width: 'auto', whiteSpace: 'nowrap', padding: '9px 14px' }}
+                    onClick={handleSavePat}
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Divider */}
+            <hr style={s.divider} />
+
+            {/* Match strategy */}
+            <div>
+              <label style={{ ...s.label, margin: '0 0 6px' }}>Matching</label>
+              <select
+                style={s.input}
+                value={config.matchStrategy ?? 'ignore_first_segment'}
+                onChange={(e) =>
+                  onConfigChange({
+                    ...config,
+                    matchStrategy: (e.target as HTMLSelectElement).value as MatchStrategy,
+                  })
+                }
+              >
+                <option value="ignore_first_segment">Ignore top-level group (recommended)</option>
+                <option value="ignore_first_two_segments">Ignore top two groups</option>
+                <option value="full_name">Exact full name</option>
+              </select>
+              <p style={{ fontSize: '10px', color: s.colors.textMuted, marginTop: '6px', lineHeight: 1.4 }}>
+                {config.matchStrategy === 'full_name'
+                  ? 'Tokens must have identical names to match. Brand/primary/resting will not match TheSun/primary/resting.'
+                  : config.matchStrategy === 'ignore_first_two_segments'
+                  ? 'Ignores the first two variable groups when matching. e.g. Brand/Colour/primary/resting and TheSun/Colors/primary/resting both match on primary/resting.'
+                  : 'Ignores the top-level variable group when matching. e.g. Brand/primary/resting and TheSun/primary/resting both match on primary/resting.'
+                }
+              </p>
+            </div>
           </div>
         )}
 
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <button
-            onClick={() => setShowMatchSettings(!showMatchSettings)}
+            onClick={() => setShowSettings(!showSettings)}
             style={{
-              padding: '9px',
-              background: showMatchSettings ? s.colors.bgTertiary : s.colors.bgSecondary,
+              width: '38px',
+              height: '38px',
+              background: showSettings ? s.colors.bgTertiary : s.colors.bgSecondary,
               border: `1px solid ${s.colors.borderLight}`,
-              borderRadius: '8px',
+              borderRadius: '50%',
               cursor: 'pointer',
               lineHeight: 0,
               display: 'flex',
@@ -755,10 +760,11 @@ export function SetupView({
               justifyContent: 'center',
               flexShrink: 0,
               transition: 'all 0.15s ease',
+              padding: 0,
             }}
-            title="Match settings"
+            title="Settings"
             dangerouslySetInnerHTML={{
-              __html: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${showMatchSettings ? s.colors.text : s.colors.textMuted}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+              __html: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${showSettings ? s.colors.text : s.colors.textMuted}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
             }}
           />
           <button
